@@ -1,0 +1,6 @@
+black
+hypothesis
+invoke
+mypy
+pylint
+pytest
