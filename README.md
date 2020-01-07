@@ -18,7 +18,7 @@ To install, just run `pip install automap`.
 Examples
 --------
 
-`automap` objects come in two variants:
+`automap` objects are sort of like "inverse sequences". They come in two variants:
 
 ### FrozenAutoMap
 
@@ -87,7 +87,7 @@ automap.FrozenAutoMap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 >>> from automap import AutoMap
 ```
 
-Unlike `FrozenAutoMap` objects, `AutoMap` objects are growable; new keys may be
+Unlike `FrozenAutoMap` objects, `AutoMap` objects can grow; new keys may be
 added, but existing ones may not be deleted or changed.
 
 ```py
