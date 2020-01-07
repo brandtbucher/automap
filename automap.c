@@ -346,15 +346,17 @@ extend(AutoMapObject* self, PyObject* keys)
         for (index = 0; index < allocate + SCAN - 1; index++) {
             self->entries[index].hash = -1;
         }
-        for (index = 0; index < self->size + SCAN - 1; index++) {
+        Py_ssize_t oldallocate = self->size;
+        self->size = allocate;
+        for (index = 0; index < oldallocate + SCAN - 1; index++) {
             if ((entries[index].hash != -1) && (insert_hash(self, entries[index].index, entries[index].hash))) {
                 PyMem_Del(self->entries);
                 self->entries = entries;
+                self->size = oldallocate;
                 return -1;
             }
         }
         PyMem_Del(entries);
-        self->size = allocate;
     }
     for (index = 0; index < extendsize; index++) {
         Py_INCREF(PyList_GET_ITEM(keys, index));
