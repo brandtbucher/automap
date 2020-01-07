@@ -113,7 +113,7 @@ is what really gives us our awesome performance.
 
 
 # define LOAD 0.5
-# define SCAN 8
+# define SCAN 7
 
 
 typedef struct {
@@ -149,8 +149,8 @@ lookup(AutoMapObject* self, PyObject* key)
     Py_hash_t h;
     Py_ssize_t i;
     Py_ssize_t stop;
-    for (Py_ssize_t index = hash & mask;; index = (5 * (index - (SCAN - 1)) + 1) & mask) {
-        for (stop = index + SCAN; index < stop; index++) {
+    for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + 1) & mask) {
+        for (stop = index + SCAN; index <= stop; index++) {
             h = entries[index].hash;
             if (h == hash) {
                 i = entries[index].index;
@@ -187,8 +187,8 @@ _insert(AutoMapObject* self, PyObject* key, Py_ssize_t offset, Py_hash_t hash, i
     Py_ssize_t mask = self->size-1;
     Py_hash_t h;
     Py_ssize_t stop;
-    for (Py_ssize_t index = hash & mask;; index = (5 * (index - (SCAN - 1)) + 1) & mask) {
-        for (stop = index + SCAN; index < stop; index++) {
+    for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + 1) & mask) {
+        for (stop = index + SCAN; index <= stop; index++) {
             h = entries[index].hash;
             if (h == -1) {
                 /* Miss. */
@@ -296,14 +296,14 @@ new(PyTypeObject* cls, PyObject* keys)
     while (self->size * LOAD <= size) {
         self->size <<= 1;
     }
-    self->entries = PyMem_New(entry, self->size + SCAN - 1);
+    self->entries = PyMem_New(entry, self->size + SCAN);
     if (!self->entries) {
         Py_DECREF(self);
         return NULL;
     }
     Py_ssize_t index;
     entry* entries = self->entries;
-    for (index = 0; index < self->size + SCAN - 1; index++) {
+    for (index = 0; index < self->size + SCAN; index++) {
         entries[index].hash = -1;
     }
     for (index = 0; index < size; index++) {
@@ -337,17 +337,17 @@ extend(AutoMapObject* self, PyObject* keys)
     Py_ssize_t index;
     if (allocate != self->size) {
         entry* entries = self->entries;
-        self->entries = PyMem_New(entry, allocate + SCAN - 1);
+        self->entries = PyMem_New(entry, allocate + SCAN);
         if (!self->entries) {
             self->entries = entries;
             return -1;
         }
-        for (index = 0; index < allocate + SCAN - 1; index++) {
+        for (index = 0; index < allocate + SCAN; index++) {
             self->entries[index].hash = -1;
         }
         Py_ssize_t oldallocate = self->size;
         self->size = allocate;
-        for (index = 0; index < oldallocate + SCAN - 1; index++) {
+        for (index = 0; index < oldallocate + SCAN; index++) {
             if ((entries[index].hash != -1) && (insert_hash(self, entries[index].index, entries[index].hash))) {
                 PyMem_Del(self->entries);
                 self->entries = entries;
@@ -505,7 +505,7 @@ AutoMap_methods___sizeof__(AutoMapObject* self)
         Py_TYPE(self)->tp_basicsize
         + PyList_Type.tp_basicsize
         + ((PyListObject*)self->keys)->allocated * sizeof(PyObject*)
-        + (self->size + SCAN - 1) * sizeof(entry)
+        + (self->size + SCAN) * sizeof(entry)
     );
 }
 
