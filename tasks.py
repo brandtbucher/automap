@@ -18,7 +18,7 @@ def clean(context):
 @invoke.task(clean)
 def build(context):
     context.run(
-        "{} setup.py develop sdist bdist_wheel".format(sys.executable),
+        "{} setup.py develop sdist".format(sys.executable),
         env={"CFLAGS": "-Werror -Wno-deprecated-declarations"},
         replace_env=False,
     )
