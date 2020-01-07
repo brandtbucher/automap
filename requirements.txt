@@ -2,7 +2,5 @@ attrs
 black; python_version >= '3.6'
 hypothesis
 invoke
-mypy
-pylint
 pytest
 twine
