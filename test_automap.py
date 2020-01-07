@@ -49,3 +49,12 @@ def test_auto_map___getitem__(keys: FrozenSet[Hashable], others: FrozenSet[Hasha
 @given(keys=keys)
 def test_auto_map___iter__(keys: FrozenSet[Hashable]):
     assert [*AutoMap(keys)] == [*keys]
+
+
+@given(keys=keys, key=from_type(CompositeAtom))
+def test_issue_3(keys: FrozenSet[Hashable], key: Hashable):
+    assume(key not in keys)
+    a = AutoMap(keys)
+    a |= (key,)
+    with raises(KeyError):
+        a |= (key,)
