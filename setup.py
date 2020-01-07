@@ -7,7 +7,7 @@ with open("README.md") as file:
 
 setup(
     name="automap",
-    version="0.0.2",
+    version="0.0.3",
     description="High-performance autoincremented integer-valued mappings.",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
