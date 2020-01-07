@@ -501,10 +501,18 @@ AutoMap_methods___getnewargs__(AutoMapObject* self)
 static PyObject*
 AutoMap_methods___sizeof__(AutoMapObject* self)
 {
+    PyObject *listsizeof = PyObject_CallMethod(self->keys, "__sizeof__", NULL);
+    if (!listsizeof) {
+        return NULL;
+    }
+    Py_ssize_t listbytes = PyLong_AsSsize_t(listsizeof);
+    Py_DECREF(listsizeof);
+    if (listbytes == -1 && PyErr_Occurred()) {
+        return NULL;
+    }
     return PyLong_FromSsize_t(
         Py_TYPE(self)->tp_basicsize
-        + PyList_Type.tp_basicsize
-        + ((PyListObject*)self->keys)->allocated * sizeof(PyObject*)
+        + listbytes
         + (self->size + SCAN) * sizeof(entry)
     );
 }
