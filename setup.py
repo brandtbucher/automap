@@ -7,7 +7,7 @@ with open("README.md") as file:
 
 setup(
     name="automap",
-    version="0.0.1",
+    version="0.0.2",
     description="High-performance autoincremented integer-valued mappings.",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
@@ -16,6 +16,5 @@ setup(
     author="Brandt Bucher",
     author_email="brandtbucher@gmail.com",
     license="MIT",
-    package_data={'': ['*.h']},
     ext_modules=[Extension("automap", ["automap.c"])],
 )

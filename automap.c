@@ -1,6 +1,3 @@
-# include "automap.h"
-
-
 // TODO: Tests, group similar functionality, make immutable parent class, make copies faster.
 // TODO: Check refcounts when calling into hash and comparison functions.
 // TODO: Add GC support?
@@ -110,6 +107,32 @@ our list of keys gives us for free, but the hardware-friendly hash table design
 is what really gives us our awesome performance.
 
 *******************************************************************************/
+
+
+# include "Python.h"
+
+
+# define LOAD 0.5
+# define SCAN 8
+
+
+typedef struct {
+    Py_hash_t hash;
+    Py_ssize_t index;
+} entry;
+
+
+typedef struct {
+    PyObject_VAR_HEAD
+    Py_ssize_t size;
+    entry *entries;
+    PyObject* keys;
+} AutoMapObject;
+
+
+static PyTypeObject AutoMapType;
+static PyTypeObject FrozenAutoMapType;
+static PyObject* intcache = NULL;
 
 
 static Py_ssize_t
