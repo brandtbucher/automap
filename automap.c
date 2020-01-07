@@ -203,7 +203,7 @@ _insert(AutoMapObject* self, PyObject* key, Py_ssize_t offset, Py_hash_t hash, i
                 guess = PyList_GET_ITEM(self->keys, entries[index].index);
                 if (guess == key) {
                     /* Hit. */
-                    PyErr_SetObject(PyExc_KeyError, key);
+                    PyErr_SetObject(PyExc_ValueError, key);
                     return -1;
                 }
                 result = PyObject_RichCompareBool(guess, key, Py_EQ);
@@ -213,7 +213,7 @@ _insert(AutoMapObject* self, PyObject* key, Py_ssize_t offset, Py_hash_t hash, i
                 }
                 if (result) {
                     /* Hit. */
-                    PyErr_SetObject(PyExc_KeyError, key);
+                    PyErr_SetObject(PyExc_ValueError, key);
                     return -1;
                 }
             }

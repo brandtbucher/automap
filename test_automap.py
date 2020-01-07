@@ -56,5 +56,5 @@ def test_issue_3(keys: FrozenSet[Hashable], key: Hashable):
     assume(key not in keys)
     a = AutoMap(keys)
     a |= (key,)
-    with raises(KeyError):
+    with raises(ValueError):
         a |= (key,)
