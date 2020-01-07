@@ -323,12 +323,12 @@ new(PyTypeObject* cls, PyObject* keys)
 static int
 extend(AutoMapObject* self, PyObject* keys)
 {
-    keys = PySequence_List(keys);
+    keys = PySequence_Fast(keys, "expected an iterable of keys.");
     if (!keys) {
         return -1;
     }
     Py_ssize_t oldsize = PyList_GET_SIZE(self->keys);
-    Py_ssize_t extendsize = PyList_GET_SIZE(keys);
+    Py_ssize_t extendsize = PySequence_Fast_GET_SIZE(keys);
     Py_ssize_t size = oldsize + extendsize;
     Py_ssize_t allocate = self->size;
     while (allocate * LOAD <= size) {
@@ -336,7 +336,6 @@ extend(AutoMapObject* self, PyObject* keys)
     }
     Py_ssize_t index;
     if (allocate != self->size) {
-        // RESIZE
         entry* entries = self->entries;
         self->entries = PyMem_New(entry, allocate + SCAN - 1);
         if (!self->entries) {
@@ -359,8 +358,7 @@ extend(AutoMapObject* self, PyObject* keys)
         PyMem_Del(entries);
     }
     for (index = 0; index < extendsize; index++) {
-        Py_INCREF(PyList_GET_ITEM(keys, index));
-        if (insert_key(self, PyList_GET_ITEM(keys, index))) {
+        if (insert_key(self, PySequence_Fast_GET_ITEM(keys, index))) {
             return -1;
         }
     }
