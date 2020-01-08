@@ -56,6 +56,11 @@ def test_auto_map___iter__(keys: FrozenSet[CompositeAtom]):
 
 
 @given(keys=infer)
+def test_auto_map___reversed__(keys: FrozenSet[CompositeAtom]):
+    assert [*reversed(AutoMap(keys))] == [*reversed([*keys])]
+
+
+@given(keys=infer)
 def test_auto_map_add(keys: FrozenSet[CompositeAtom]):
     a = AutoMap()
     for l, key in enumerate(keys):

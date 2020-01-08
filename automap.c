@@ -506,6 +506,13 @@ AutoMap_methods___getnewargs__(AutoMapObject* self)
 
 
 static PyObject*
+AutoMap_methods___reversed__(AutoMapObject* self)
+{
+    return PyObject_CallMethod(self->keys, "__reversed__", NULL);
+}
+
+
+static PyObject*
 AutoMap_methods___sizeof__(AutoMapObject* self)
 {
     PyObject *listsizeof = PyObject_CallMethod(self->keys, "__sizeof__", NULL);
@@ -575,6 +582,7 @@ AutoMap_methods_values(AutoMapObject* self)
 
 static PyMethodDef FrozenAutoMap_methods[] = {
     {"__getnewargs__", (PyCFunction) AutoMap_methods___getnewargs__, METH_NOARGS, NULL},
+    {"__reversed__", (PyCFunction) AutoMap_methods___reversed__, METH_NOARGS, NULL},
     {"__sizeof__", (PyCFunction) AutoMap_methods___sizeof__, METH_NOARGS, NULL},
     {"get", (PyCFunction) AutoMap_methods_get, METH_VARARGS, NULL},
     {"items", (PyCFunction) AutoMap_methods_items, METH_NOARGS, NULL},
