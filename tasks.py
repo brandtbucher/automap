@@ -19,7 +19,7 @@ def clean(context):
 def build(context):
     context.run(
         "{} setup.py develop sdist".format(sys.executable),
-        env={"CFLAGS": "-Werror -Wno-deprecated-declarations"},
+        env={"CPPFLAGS": "-Werror -Wno-deprecated-declarations"},
         replace_env=False,
     )
     if (3, 6) <= sys.version_info:
