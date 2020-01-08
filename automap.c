@@ -141,10 +141,11 @@ lookup_hash(AutoMapObject* self, PyObject* key, Py_hash_t hash)
     int result;
     entry* entries = self->entries;
     Py_ssize_t mask = self->size - 1;
+    Py_hash_t mixin = hash;
     Py_hash_t h;
     Py_ssize_t i;
     Py_ssize_t stop;
-    for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + 1) & mask) {
+    for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + mixin + 1) & mask, mixin >>= 8) {
         for (stop = index + SCAN; index <= stop; index++) {
             h = entries[index].hash;
             if (h == hash) {
