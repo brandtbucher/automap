@@ -254,7 +254,6 @@ insert_key(AutoMapObject* self, PyObject* key)
 static int
 fill_intcache(Py_ssize_t size)
 {
-    Py_ssize_t index;
     if (!intcache) {
         intcache = PyList_New(0);
         if (!intcache) {
@@ -262,7 +261,7 @@ fill_intcache(Py_ssize_t size)
         }
     }
     PyObject* item;
-    for (index = PyList_GET_SIZE(intcache); index < size; index++) {
+    for (Py_ssize_t index = PyList_GET_SIZE(intcache); index < size; index++) {
         item = PyLong_FromSsize_t(index);
         if (!item) {
             return -1;
@@ -273,6 +272,52 @@ fill_intcache(Py_ssize_t size)
         }
         Py_DECREF(item);
     }
+    return 0;
+}
+
+
+static int
+grow(AutoMapObject* self, Py_ssize_t needed)
+{
+    if (fill_intcache(needed)) {
+        return -1;
+    }
+    Py_ssize_t oldsize = self->size;
+    Py_ssize_t newsize = 1;
+    needed /= LOAD;
+    while (newsize < needed) {
+        newsize <<= 1;
+    }
+    if (newsize <= oldsize) {
+        return 0;
+    }
+    entry* oldentries = self->entries;
+    entry* newentries = PyMem_New(entry, newsize + SCAN);
+    if (!newentries) {
+        return -1;
+    }
+    Py_ssize_t index;
+    for (index = 0; index < newsize + SCAN; index++) {
+        newentries[index].hash = -1;
+    }
+    self->entries = newentries;
+    self->size = newsize;
+    if (oldsize) {
+        for (index = 0; index < oldsize + SCAN; index++) {
+            if (
+                (oldentries[index].hash != -1)
+                && insert_hash(
+                    self, oldentries[index].index, oldentries[index].hash
+                )
+            ) {
+                PyMem_Del(self->entries);
+                self->entries = oldentries;
+                self->size = oldsize;
+                return -1;
+            }
+        }
+    }
+    PyMem_Del(oldentries);
     return 0;
 }
 
@@ -291,29 +336,15 @@ new(PyTypeObject* cls, PyObject* keys)
     }
     self->keys = keys;
     Py_ssize_t size = PyList_GET_SIZE(keys);
-    self->size = 1;
-    while (self->size * LOAD <= size) {
-        self->size <<= 1;
-    }
-    self->entries = PyMem_New(entry, self->size + SCAN);
-    if (!self->entries) {
+    if (grow(self, size)) {
         Py_DECREF(self);
         return NULL;
     }
-    Py_ssize_t index;
-    entry* entries = self->entries;
-    for (index = 0; index < self->size + SCAN; index++) {
-        entries[index].hash = -1;
-    }
-    for (index = 0; index < size; index++) {
+    for (Py_ssize_t index = 0; index < size; index++) {
         if (insert(self, index)) {
             Py_DECREF(self);
             return NULL;
         }
-    }
-    if (fill_intcache(size)) {
-        Py_DECREF(self);
-        return NULL;
     }
     return self;
 }
@@ -326,44 +357,16 @@ extend(AutoMapObject* self, PyObject* keys)
     if (!keys) {
         return -1;
     }
-    Py_ssize_t oldsize = PyList_GET_SIZE(self->keys);
     Py_ssize_t extendsize = PySequence_Fast_GET_SIZE(keys);
-    Py_ssize_t size = oldsize + extendsize;
-    Py_ssize_t allocate = self->size;
-    while (allocate * LOAD <= size) {
-        allocate <<= 1;
-    }
-    Py_ssize_t index;
-    if (allocate != self->size) {
-        entry* entries = self->entries;
-        self->entries = PyMem_New(entry, allocate + SCAN);
-        if (!self->entries) {
-            self->entries = entries;
-            return -1;
-        }
-        for (index = 0; index < allocate + SCAN; index++) {
-            self->entries[index].hash = -1;
-        }
-        Py_ssize_t oldallocate = self->size;
-        self->size = allocate;
-        for (index = 0; index < oldallocate + SCAN; index++) {
-            if ((entries[index].hash != -1) && (insert_hash(self, entries[index].index, entries[index].hash))) {
-                PyMem_Del(self->entries);
-                self->entries = entries;
-                self->size = oldallocate;
-                return -1;
-            }
-        }
-        PyMem_Del(entries);
-    }
-    for (index = 0; index < extendsize; index++) {
-        if (insert_key(self, PySequence_Fast_GET_ITEM(keys, index))) {
-            return -1;
-        }
-    }
-    if (fill_intcache(size)) {
-        Py_DECREF(self);
+    if (grow(self, PyList_GET_SIZE(self->keys) + extendsize)) {
+        Py_DECREF(keys);
         return -1;
+    }
+    for (Py_ssize_t index = 0; index < extendsize; index++) {
+        if (insert_key(self, PySequence_Fast_GET_ITEM(keys, index))) {
+            Py_DECREF(keys);
+            return -1;
+        }
     }
     Py_DECREF(keys);
     return 0;
@@ -373,39 +376,10 @@ extend(AutoMapObject* self, PyObject* keys)
 static int
 append(AutoMapObject* self, PyObject* key)
 {
-    Py_ssize_t size = PyList_GET_SIZE(self->keys) + 1;
-    Py_ssize_t allocate = self->size;
-    while (allocate * LOAD <= size) {
-        allocate <<= 1;
-    }
-    Py_ssize_t index;
-    if (allocate != self->size) {
-        entry* entries = self->entries;
-        self->entries = PyMem_New(entry, allocate + SCAN);
-        if (!self->entries) {
-            self->entries = entries;
-            return -1;
-        }
-        for (index = 0; index < allocate + SCAN; index++) {
-            self->entries[index].hash = -1;
-        }
-        Py_ssize_t oldallocate = self->size;
-        self->size = allocate;
-        for (index = 0; index < oldallocate + SCAN; index++) {
-            if ((entries[index].hash != -1) && (insert_hash(self, entries[index].index, entries[index].hash))) {
-                PyMem_Del(self->entries);
-                self->entries = entries;
-                self->size = oldallocate;
-                return -1;
-            }
-        }
-        PyMem_Del(entries);
-    }
-    if (insert_key(self, key)) {
+    if (grow(self, PyList_GET_SIZE(self->keys) + 1)) {
         return -1;
     }
-    if (fill_intcache(size)) {
-        Py_DECREF(self);
+    if (insert_key(self, key)) {
         return -1;
     }
     return 0;
