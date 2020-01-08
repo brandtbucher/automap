@@ -1,6 +1,5 @@
-// TODO: Tests, group similar functionality, make immutable parent class, make copies faster.
+// TODO: Tests, group similar functionality, make copies faster.
 // TODO: Check refcounts when calling into hash and comparison functions.
-// TODO: Add GC support?
 
 
 /*******************************************************************************
@@ -371,6 +370,48 @@ extend(AutoMapObject* self, PyObject* keys)
 }
 
 
+static int
+append(AutoMapObject* self, PyObject* key)
+{
+    Py_ssize_t size = PyList_GET_SIZE(self->keys) + 1;
+    Py_ssize_t allocate = self->size;
+    while (allocate * LOAD <= size) {
+        allocate <<= 1;
+    }
+    Py_ssize_t index;
+    if (allocate != self->size) {
+        entry* entries = self->entries;
+        self->entries = PyMem_New(entry, allocate + SCAN);
+        if (!self->entries) {
+            self->entries = entries;
+            return -1;
+        }
+        for (index = 0; index < allocate + SCAN; index++) {
+            self->entries[index].hash = -1;
+        }
+        Py_ssize_t oldallocate = self->size;
+        self->size = allocate;
+        for (index = 0; index < oldallocate + SCAN; index++) {
+            if ((entries[index].hash != -1) && (insert_hash(self, entries[index].index, entries[index].hash))) {
+                PyMem_Del(self->entries);
+                self->entries = entries;
+                self->size = oldallocate;
+                return -1;
+            }
+        }
+        PyMem_Del(entries);
+    }
+    if (insert_key(self, key)) {
+        return -1;
+    }
+    if (fill_intcache(size)) {
+        Py_DECREF(self);
+        return -1;
+    }
+    return 0;
+}
+
+
 static Py_ssize_t
 AutoMap_length(AutoMapObject* self)
 {
@@ -566,7 +607,7 @@ AutoMap_methods_values(AutoMapObject* self)
 }
 
 
-static PyMethodDef AutoMap_methods[] = {
+static PyMethodDef FrozenAutoMap_methods[] = {
     {"__getnewargs__", (PyCFunction) AutoMap_methods___getnewargs__, METH_NOARGS, NULL},
     {"__sizeof__", (PyCFunction) AutoMap_methods___sizeof__, METH_NOARGS, NULL},
     {"get", (PyCFunction) AutoMap_methods_get, METH_VARARGS, NULL},
@@ -634,7 +675,7 @@ static PyTypeObject FrozenAutoMapType = {
     .tp_doc = "An immutable autoincremented integer-valued mapping.",
     .tp_hash = (hashfunc) FrozenAutoMap_hash,
     .tp_iter = (getiterfunc) AutoMap_iter,
-    .tp_methods = AutoMap_methods,
+    .tp_methods = FrozenAutoMap_methods,
     .tp_name = "automap.FrozenAutoMap",
     .tp_new = AutoMap_new,
     .tp_repr = (reprfunc) AutoMap_repr,
@@ -658,11 +699,28 @@ static PyNumberMethods AutoMap_as_number = {
 };
 
 
+static PyObject*
+AutoMap_methods_add(AutoMapObject* self, PyObject* other)
+{
+    if (append(self, other)) {
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
+
+static PyMethodDef AutoMap_methods[] = {
+    {"add", (PyCFunction) AutoMap_methods_add, METH_O, NULL},
+    {NULL},
+};
+
+
 static PyTypeObject AutoMapType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_as_number = &AutoMap_as_number,
     .tp_base = &FrozenAutoMapType,
     .tp_doc = "A grow-only autoincremented integer-valued mapping.",
+    .tp_methods = AutoMap_methods,
     .tp_name = "automap.AutoMap",
     .tp_richcompare = (richcmpfunc) AutoMap_richcompare,
 };
