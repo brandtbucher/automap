@@ -3,4 +3,4 @@ black; python_version >= '3.6'
 hypothesis
 invoke
 pytest
-twine
+twine; python_version >= '3.6'

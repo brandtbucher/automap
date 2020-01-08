@@ -22,7 +22,8 @@ def build(context):
         env={"CFLAGS": "-Werror -Wno-deprecated-declarations"},
         replace_env=False,
     )
-    context.run("twine check dist/*")
+    if (3, 6) <= sys.version_info:
+        context.run("twine check dist/*")
 
 
 @invoke.task(build)
@@ -31,6 +32,8 @@ def test(context):
     context.run("pytest")
 
 
-@invoke.task(test)
-def release(context):
-    context.run("twine upload dist/*")
+if (3, 6) <= sys.version_info:
+
+    @invoke.task(test)
+    def release(context):
+        context.run("twine upload dist/*")
