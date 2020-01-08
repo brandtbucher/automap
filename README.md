@@ -95,7 +95,17 @@ added, but existing ones may not be deleted or changed.
 >>> d
 automap.AutoMap(['A', 'B', 'C'])
 >>> d |= "DEF"  # Here, d *is* mutated!
+>>> d
 automap.AutoMap(['A', 'B', 'C', 'D', 'E', 'F'])
+```
+
+They also have an `add` method for adding a single new key:
+
+```py
+>>> e = AutoMap(["I", "II", "III"])
+>>> e.add("IV")
+>>> e
+automap.AutoMap(['I', 'II', 'III', 'IV'])
 ```
 
 Performance
