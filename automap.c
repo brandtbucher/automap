@@ -135,12 +135,8 @@ static PyObject* intcache = NULL;
 
 
 static Py_ssize_t
-lookup(AutoMapObject* self, PyObject* key)
+lookup_hash(AutoMapObject* self, PyObject* key, Py_hash_t hash)
 {
-    Py_hash_t hash = PyObject_Hash(key);
-    if (hash == -1) {
-        return -1;
-    }
     PyObject *guess;
     int result;
     entry* entries = self->entries;
@@ -156,7 +152,7 @@ lookup(AutoMapObject* self, PyObject* key)
                 guess = PyList_GET_ITEM(self->keys, i);
                 if (guess == key) {
                     /* Hit. */
-                    return i;
+                    return index;
                 }
                 result = PyObject_RichCompareBool(guess, key, Py_EQ);
                 if (result < 0) {
@@ -165,59 +161,49 @@ lookup(AutoMapObject* self, PyObject* key)
                 }
                 if (result) {
                     /* Hit. */
-                    return i;
+                    return index;
                 }
             }
             else if (h == -1) {
                 /* Miss. */
-                return -1;
+                return index;
             }
         }
     }
 }
 
 
+static Py_ssize_t
+lookup(AutoMapObject* self, PyObject* key) {
+    Py_hash_t hash = PyObject_Hash(key);
+    if (hash == -1) {
+        return -1;
+    }
+    Py_ssize_t index = lookup_hash(self, key, hash);
+    if ((index < 0) || (self->entries[index].hash == -1)) {
+        return -1;
+    }
+    return self->entries[index].index;
+}
+
+
 static int
 _insert(AutoMapObject* self, PyObject* key, Py_ssize_t offset, Py_hash_t hash, int append)
 {
-    PyObject *guess;
-    int result;
-    entry* entries = self->entries;
-    Py_ssize_t mask = self->size-1;
-    Py_hash_t h;
-    Py_ssize_t stop;
-    for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + 1) & mask) {
-        for (stop = index + SCAN; index <= stop; index++) {
-            h = entries[index].hash;
-            if (h == -1) {
-                /* Miss. */
-                if (append && PyList_Append(self->keys, key)) {
-                    return -1;
-                }
-                entries[index].hash = hash;
-                entries[index].index = offset;
-                return 0;
-            }
-            if (h == hash) {
-                guess = PyList_GET_ITEM(self->keys, entries[index].index);
-                if (guess == key) {
-                    /* Hit. */
-                    PyErr_SetObject(PyExc_ValueError, key);
-                    return -1;
-                }
-                result = PyObject_RichCompareBool(guess, key, Py_EQ);
-                if (result < 0) {
-                    /* Error. */
-                    return -1;
-                }
-                if (result) {
-                    /* Hit. */
-                    PyErr_SetObject(PyExc_ValueError, key);
-                    return -1;
-                }
-            }
-        }
+    Py_ssize_t index = lookup_hash(self, key, hash);
+    if (index < 0) {
+        return -1;
     }
+    if (self->entries[index].hash != -1) {
+        PyErr_SetObject(PyExc_ValueError, key);
+        return -1;
+    }
+    if (append && PyList_Append(self->keys, key)) {
+        return -1;
+    }
+    self->entries[index].hash = hash;
+    self->entries[index].index = offset;
+    return 0;
 }
 
 
