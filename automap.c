@@ -195,15 +195,17 @@ _insert(AutoMapObject* self, PyObject* key, Py_ssize_t offset, Py_hash_t hash, i
     if (index < 0) {
         return -1;
     }
-    if (self->entries[index].hash != -1) {
+    entry* entries = self->entries;
+    if (entries[index].hash != -1) {
         PyErr_SetObject(PyExc_ValueError, key);
         return -1;
     }
+    entries[index].hash = hash;
+    entries[index].index = offset;
     if (append && PyList_Append(self->keys, key)) {
+        entries[index].hash = -1;
         return -1;
     }
-    self->entries[index].hash = hash;
-    self->entries[index].index = offset;
     return 0;
 }
 
