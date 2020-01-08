@@ -675,8 +675,19 @@ AutoMap_methods_add(AutoMapObject* self, PyObject* other)
 }
 
 
+static PyObject*
+AutoMap_methods_update(AutoMapObject* self, PyObject* other)
+{
+    if (extend(self, other)) {
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
+
 static PyMethodDef AutoMap_methods[] = {
     {"add", (PyCFunction) AutoMap_methods_add, METH_O, NULL},
+    {"update", (PyCFunction) AutoMap_methods_update, METH_O, NULL},
     {NULL},
 };
 
