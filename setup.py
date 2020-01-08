@@ -6,15 +6,15 @@ with open("README.md") as file:
 
 
 setup(
-    name="automap",
-    version="0.1.0",
-    description="High-performance autoincremented integer-valued mappings.",
-    long_description=LONG_DESCRIPTION,
-    long_description_content_type="text/markdown",
-    python_requires=">=3.5.0",
-    url="https://github.com/brandtbucher/automap",
     author="Brandt Bucher",
     author_email="brandtbucher@gmail.com",
-    license="MIT",
+    description="High-performance autoincremented integer-valued mappings.",
     ext_modules=[Extension("automap", ["automap.c"])],
+    license="MIT",
+    long_description=LONG_DESCRIPTION,
+    long_description_content_type="text/markdown",
+    name="automap",
+    python_requires=">=3.5.0",
+    url="https://github.com/brandtbucher/automap",
+    version="0.1.0",
 )
