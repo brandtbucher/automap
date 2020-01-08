@@ -60,7 +60,7 @@ order, and their offsets are placed in the Indices table at position
 HASH % TABLE_SIZE. Though it's not used here, collisions are resolved by jumping
 around the table according to the following recurrence:
 
-NEXT_INDEX = (5 * CURRENT_INDEX + 1 + (UPPER_HASH_BITS >>= 5)) % TABLE_SIZE
+NEXT_INDEX = (5 * CURRENT_INDEX + 1 + (HASH >>= 5)) % TABLE_SIZE
 
 This is good in the face of bad hash algorithms, but is sorta expensive. It's
 also unable to utilize cache lines at all, since it's basically random (it's
@@ -94,7 +94,7 @@ the edge of the table during the this part, since we've left enough free space
 We then jump to another spot in the table using a version of the recurrence
 above:
 
-NEXT_INDEX = (5 * (CURRENT_INDEX - SCAN) + 1) % TABLE_SIZE
+NEXT_INDEX = (5 * (CURRENT_INDEX - SCAN) + 1 + (HASH >>= 8)) % TABLE_SIZE
 
 ...and repeat the whole thing over again. This collision resolution strategy is
 similar to what Python's sets do, so we still handle some nasty collisions and
@@ -111,8 +111,11 @@ is what really gives us our awesome performance.
 # include "Python.h"
 
 
+/* Experimentation shows that these values work well: */
+
 # define LOAD 0.5
-# define SCAN 7
+# define SCAN 15
+# define BITS 8
 
 
 typedef struct {
@@ -145,7 +148,7 @@ lookup_hash(AutoMapObject* self, PyObject* key, Py_hash_t hash)
     Py_hash_t h;
     Py_ssize_t i;
     Py_ssize_t stop;
-    for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + mixin + 1) & mask, mixin >>= 8) {
+    for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + mixin + 1) & mask, mixin >>= BITS) {
         for (stop = index + SCAN; index <= stop; index++) {
             h = entries[index].hash;
             if (h == hash) {
