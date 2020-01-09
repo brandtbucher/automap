@@ -1,5 +1,6 @@
 // TODO: Tests, group similar functionality, make copies faster.
 // TODO: Check refcounts when calling into hash and comparison functions.
+// TODO: Check allocation and cleanup.
 
 
 /*******************************************************************************
@@ -118,6 +119,14 @@ is what really gives us our awesome performance.
 # define BITS 8
 
 
+# define KEYS            'K'
+# define VALUES          'V'
+# define ITEMS           'I'
+# define REVERSED_KEYS   'k'
+# define REVERSED_VALUES 'v'
+# define REVERSED_ITEMS  'i'
+
+
 typedef struct {
     Py_hash_t hash;
     Py_ssize_t index;
@@ -132,9 +141,278 @@ typedef struct {
 } AutoMapObject;
 
 
+typedef struct {
+    PyObject_VAR_HEAD
+    char kind;
+    AutoMapObject* map;
+} AutoMapViewObject;
+
+
+typedef struct {
+    PyObject_VAR_HEAD
+    char kind;
+    PyObject* keys;
+    Py_ssize_t index;
+} AutoMapIteratorObject;
+
+
 static PyTypeObject AutoMapType;
+static PyTypeObject AutoMapIteratorType;
+static PyTypeObject AutoMapViewType;
 static PyTypeObject FrozenAutoMapType;
+
+
 static PyObject* intcache = NULL;
+
+
+static void
+AutoMapIterator_dealloc(AutoMapIteratorObject* self)
+{
+    Py_DECREF(self->keys);
+    // Py_TYPE(self)->tp_free((PyObject*) self);
+}
+
+
+static AutoMapIteratorObject*
+AutoMapIterator_iter(AutoMapIteratorObject* self)
+{
+    Py_INCREF(self);
+    return self;
+}
+
+
+static PyObject*
+AutoMapIterator_iternext(AutoMapIteratorObject* self)
+{
+    if (self->index == PyList_GET_SIZE(self->keys)) {
+        return NULL;
+    }
+    PyObject *yield;
+    if (self->kind == ITEMS) {
+        yield = PyTuple_Pack(
+            2,
+            PyList_GET_ITEM(self->keys, self->index),
+            PyList_GET_ITEM(intcache, self->index)
+        );
+    }
+    else if (self->kind == KEYS) {
+        yield = PyList_GET_ITEM(self->keys, self->index);
+    }
+    else {
+        yield = PyList_GET_ITEM(intcache, self->index);
+    }
+    self->index++;
+    Py_INCREF(yield);
+    return yield;
+}
+
+
+static PyTypeObject AutoMapIteratorType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_basicsize = sizeof(AutoMapIteratorObject),
+    .tp_dealloc = (destructor) AutoMapIterator_dealloc,
+    .tp_iter = (getiterfunc) AutoMapIterator_iter,
+    .tp_iternext = (iternextfunc) AutoMapIterator_iternext,
+    .tp_name = "automap.AutoMapViewIterator",
+};
+
+
+static PyObject*
+viewiter(PyObject* keys, int kind) {
+    AutoMapIteratorObject* self = PyObject_New(AutoMapIteratorObject, &AutoMapIteratorType);
+    if (!self) {
+        return NULL;
+    }
+    self->kind = kind;
+    self->keys = keys;
+    self->index = 0;
+    Py_INCREF(keys);
+    return (PyObject*) self;
+}
+
+
+static PyObject*
+AutoMapView_and(PyObject* left, PyObject* right)
+{
+    left = PySet_New(left);
+    if (!left) {
+        return NULL;
+    }
+    right = PySet_New(right);
+    if (!right) {
+        Py_DECREF(left);
+        return NULL;
+    }
+    PyObject* result = PyNumber_InPlaceAnd(left, right);
+    Py_DECREF(left);
+    Py_DECREF(right);
+    return result;
+}
+
+
+static PyObject*
+AutoMapView_or(PyObject* left, PyObject* right)
+{
+    left = PySet_New(left);
+    if (!left) {
+        return NULL;
+    }
+    right = PySet_New(right);
+    if (!right) {
+        Py_DECREF(left);
+        return NULL;
+    }
+    PyObject* result = PyNumber_InPlaceOr(left, right);
+    Py_DECREF(left);
+    Py_DECREF(right);
+    return result;
+}
+
+
+static PyObject*
+AutoMapView_subtract(PyObject* left, PyObject* right)
+{
+    left = PySet_New(left);
+    if (!left) {
+        return NULL;
+    }
+    right = PySet_New(right);
+    if (!right) {
+        Py_DECREF(left);
+        return NULL;
+    }
+    PyObject* result = PyNumber_InPlaceSubtract(left, right);
+    Py_DECREF(left);
+    Py_DECREF(right);
+    return result;
+}
+
+
+static PyObject*
+AutoMapView_xor(PyObject* left, PyObject* right)
+{
+    left = PySet_New(left);
+    if (!left) {
+        return NULL;
+    }
+    right = PySet_New(right);
+    if (!right) {
+        Py_DECREF(left);
+        return NULL;
+    }
+    PyObject* result = PyNumber_InPlaceXor(left, right);
+    Py_DECREF(left);
+    Py_DECREF(right);
+    return result;
+}
+
+
+static PyNumberMethods AutoMapView_as_number = {
+    .nb_and = (binaryfunc) AutoMapView_and,
+    .nb_or = (binaryfunc) AutoMapView_or,
+    .nb_subtract = (binaryfunc) AutoMapView_subtract,
+    .nb_xor = (binaryfunc) AutoMapView_xor,
+};
+
+
+static int
+AutoMapView_contains(AutoMapViewObject* self, PyObject* other)
+{
+    return PySequence_Contains((PyObject*) self->map, other);
+}
+
+
+static PySequenceMethods AutoMapView_as_sequence = {
+    .sq_contains = (objobjproc) AutoMapView_contains,
+};
+
+
+static void
+AutoMapView_dealloc(AutoMapViewObject* self)
+{
+    Py_DECREF(self->map);
+}
+
+
+static PyObject*
+AutoMapView_iter(AutoMapViewObject* self)
+{
+    if (self->kind == KEYS) {
+        return PyObject_GetIter(self->map->keys);
+    }
+    return viewiter(self->map->keys, self->kind);
+}
+
+
+static PyObject*
+AutoMapView_methods___length_hint__(AutoMapViewObject* self)
+{
+    return PyLong_FromSsize_t(PyList_GET_SIZE(self->map->keys));
+}
+
+
+static PyObject*
+AutoMapView_methods_isdisjoint(AutoMapViewObject* self, PyObject* other)
+{
+    PyObject* intersection = PyNumber_And((PyObject*) self, other);
+    PyObject* result = PyObject_IsTrue(intersection) ? Py_True : Py_False;
+    Py_DECREF(intersection);
+    Py_INCREF(result);
+    return result;
+}
+
+
+static PyMethodDef AutoMapView_methods[] = {
+    {"__length_hint__", (PyCFunction) AutoMapView_methods___length_hint__, METH_NOARGS, NULL},
+    {"isdisjoint", (PyCFunction) AutoMapView_methods_isdisjoint, METH_O, NULL},
+    {NULL},
+};
+
+
+static PyObject*
+AutoMapView_richcompare(AutoMapViewObject* self, PyObject* other, int op)
+{
+    PyObject* left = PySet_New((PyObject*) self);
+    if (!left) {
+        return NULL;
+    }
+    PyObject* right = PySet_New(other);
+    if (!right) {
+        Py_DECREF(left);
+        return NULL;
+    }
+    PyObject* result = PyObject_RichCompare(left, right, op);
+    Py_DECREF(left);
+    Py_DECREF(right);
+    return result;
+}
+
+
+static PyTypeObject AutoMapViewType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_as_number = &AutoMapView_as_number,
+    .tp_as_sequence = &AutoMapView_as_sequence,
+    .tp_basicsize = sizeof(AutoMapViewObject),
+    .tp_dealloc = (destructor) AutoMapView_dealloc,
+    .tp_iter = (getiterfunc) AutoMapView_iter,
+    .tp_methods = AutoMapView_methods,
+    .tp_name = "automap.AutoMapView",
+    .tp_richcompare = (richcmpfunc) AutoMapView_richcompare,
+};
+
+
+static PyObject*
+view(AutoMapObject* map, int kind)
+{
+    AutoMapViewObject* self = (AutoMapViewObject*) PyObject_New(AutoMapViewObject, &AutoMapViewType);
+    if (!self) {
+        return NULL;
+    }
+    self->kind = kind;
+    self->map = map;
+    Py_INCREF(map);
+    return (PyObject*) self;
+}
 
 
 static Py_ssize_t
@@ -488,6 +766,7 @@ FrozenAutoMap_hash(AutoMapObject* self)
 static PyObject*
 AutoMap_iter(AutoMapObject* self)
 {
+    // return viewiter(self->keys, KEYS);
     return PyObject_GetIter(self->keys);
 }
 
@@ -546,37 +825,21 @@ AutoMap_methods_get(AutoMapObject* self, PyObject* args)
 static PyObject*
 AutoMap_methods_items(AutoMapObject* self)
 {
-    Py_ssize_t size = PyList_GET_SIZE(self->keys);
-    PyObject *items = PyTuple_New(size);
-    if (!items) {
-        return NULL;
-    }
-    PyObject *item, *key, *value;
-    for (Py_ssize_t index = 0; index < size; index++) {
-        key = PyList_GET_ITEM(self->keys, index);
-        value = PyList_GET_ITEM(intcache, index);
-        item = PyTuple_Pack(2, key, value);
-        if (!item) {
-            Py_DECREF(items);
-            return NULL;
-        }
-        PyTuple_SET_ITEM(items, index, item);
-    }
-    return items;
+    return view(self, ITEMS);
 }
 
 
 static PyObject*
 AutoMap_methods_keys(AutoMapObject* self)
 {
-    return PyList_AsTuple(self->keys);
+    return view(self, KEYS);
 }
 
 
 static PyObject*
 AutoMap_methods_values(AutoMapObject* self)
 {
-    return PyList_GetSlice(intcache, 0, PyList_GET_SIZE(self->keys));
+    return view(self, VALUES);
 }
 
 
