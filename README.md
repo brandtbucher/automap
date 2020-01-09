@@ -55,17 +55,17 @@ KeyError: 'X'
 The full `Mapping` interface is provided:
 
 ```py
->>> a.keys()
-('A', 'B', 'C')
->>> a.values()
+>>> [*a.keys()]
+['A', 'B', 'C']
+>>> [*a.values()]
 [0, 1, 2]
->>> a.items()
-(('A', 0), ('B', 1), ('C', 2))
+>>> [*a.items()]
+[('A', 0), ('B', 1), ('C', 2)]
 >>> a.get("X", 42)
 42
 >>> "B" in a
 True
->>> list(a)
+>>> [*a]
 ['A', 'B', 'C']
 ```
 
@@ -99,13 +99,16 @@ automap.AutoMap(['A', 'B', 'C'])
 automap.AutoMap(['A', 'B', 'C', 'D', 'E', 'F'])
 ```
 
-They also have an `add` method for adding a single new key:
+They also have `add` and `update` methods for adding new keys:
 
 ```py
 >>> e = AutoMap(["I", "II", "III"])
 >>> e.add("IV")
 >>> e
 automap.AutoMap(['I', 'II', 'III', 'IV'])
+>>> e.update(["V", "VI", "VII"])
+>>> e
+automap.AutoMap(['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'])
 ```
 
 Performance
