@@ -69,17 +69,17 @@ literally based on random number generation)!
 
 To contrast, the same table looks something like this for us:
 
-Indices: [2,  --, --, --, --, --,  1,  0, --, --, --, --, --, --, --]
-Hashes:  [40, --, --, --, --, --, 30, 15, --, --, --, --, --, --, --]
+Indices: [2,  --, --, --, --, --,  1,  0, --, --, --, --, --, --, --, --, --, --, --, --, --, --, --]
+Hashes:  [40, --, --, --, --, --, 30, 15, --, --, --, --, --, --, --, --, --, --, --, --, --, --, --]
 
 Keys:    [ a,  b,  c]
 
 Right away you can see that we don't need to store the values, because they
 match the indices (by design).
 
-Notice that even though we allocated enough space in our table for 15 entries,
+Notice that even though we allocated enough space in our table for 23 entries,
 we still insert them into the same initial positions as the dict, at position
-HASH % 8.  This leaves the whole 7-element tail chunk of the table free for
+HASH % 8.  This leaves the whole 15-element tail chunk of the table free for
 colliding keys. So, what's a good collision-resolution strategy?
 
 NEXT_INDEX = CURRENT_INDEX + 1
@@ -88,14 +88,15 @@ It's just a sequential scan! That means *every* collision-resolution lookup is
 hot in L1 cache (and can even be predicted and speculatively executed). The
 indices and hashes are actually interleaved for better cache locality as well.
 
-We repeat this scan 7 times. We don't even have to worry about wrapping around
+We repeat this scan 15 times. We don't even have to worry about wrapping around
 the edge of the table during the this part, since we've left enough free space
-(equal to the number of scans) to safely run over the end.
+(equal to the number of scans) to safely run over the end. It's wasteful for a
+small example like this, but for more realistic sizes it's just about perfect.
 
 We then jump to another spot in the table using a version of the recurrence
 above:
 
-NEXT_INDEX = (5 * (CURRENT_INDEX - 7) + 1 + (HASH >>= 8)) % TABLE_SIZE
+NEXT_INDEX = (5 * (CURRENT_INDEX - 15) + 1 + (HASH >>= 1)) % TABLE_SIZE
 
 ...and repeat the whole thing over again. This collision resolution strategy is
 similar to what Python's sets do, so we still handle some nasty collisions and
@@ -108,16 +109,13 @@ is what really gives us our awesome performance.
 
 *******************************************************************************/
 
-
 # include "Python.h"
 
 
 /* Experimentation shows that these values work well: */
 
-# define LOAD 0.5
-# define SCAN 7
-# define BITS 8
-
+# define LOAD 0.90
+# define SCAN 16
 
 # define KEYS            'K'
 # define VALUES          'V'
@@ -422,12 +420,12 @@ lookup_hash(AutoMapObject* self, PyObject* key, Py_hash_t hash)
     int result;
     entry* entries = self->entries;
     Py_ssize_t mask = self->size - 1;
-    Py_hash_t mixin = hash;
+    Py_hash_t mixin = Py_ABS(hash);
     Py_hash_t h;
     Py_ssize_t i;
     Py_ssize_t stop;
-    for (Py_ssize_t index = hash & mask;; index = (5 * (index - (SCAN + 1)) + mixin + 1) & mask, mixin >>= BITS) {
-        for (stop = index + SCAN + 1; index < stop; index++) {
+    for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + (mixin >>= 1) + 1) & mask) {
+        for (stop = index + SCAN; index < stop; index++) {
             h = entries[index].hash;
             if (h == hash) {
                 i = entries[index].index;
@@ -555,25 +553,25 @@ grow(AutoMapObject* self, Py_ssize_t needed)
     Py_ssize_t oldsize = self->size;
     Py_ssize_t newsize = 1;
     needed /= LOAD;
-    while (newsize < needed) {
+    while (newsize <= needed) {
         newsize <<= 1;
     }
     if (newsize <= oldsize) {
         return 0;
     }
     entry* oldentries = self->entries;
-    entry* newentries = PyMem_New(entry, newsize + SCAN);
+    entry* newentries = PyMem_New(entry, newsize + SCAN - 1);
     if (!newentries) {
         return -1;
     }
     Py_ssize_t index;
-    for (index = 0; index < newsize + SCAN; index++) {
+    for (index = 0; index < newsize + SCAN - 1; index++) {
         newentries[index].hash = -1;
     }
     self->entries = newentries;
     self->size = newsize;
     if (oldsize) {
-        for (index = 0; index < oldsize + SCAN; index++) {
+        for (index = 0; index < oldsize + SCAN - 1; index++) {
             if (
                 (oldentries[index].hash != -1)
                 && insert_hash(
@@ -806,7 +804,7 @@ AutoMap_methods___sizeof__(AutoMapObject* self)
     return PyLong_FromSsize_t(
         Py_TYPE(self)->tp_basicsize
         + listbytes
-        + (self->size + SCAN) * sizeof(entry)
+        + (self->size + SCAN - 1) * sizeof(entry)
     );
 }
 
