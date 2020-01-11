@@ -1,6 +1,9 @@
+from multiprocessing import Pool
+from statistics import stdev, harmonic_mean
 from random import random
 from sys import argv, getsizeof
 from timeit import Timer
+from itertools import product
 
 from automap import FrozenAutoMap
 
@@ -14,21 +17,43 @@ access_d = Timer(
     "for key in d: d[key]", "d = {k: i for i, k in enumerate(keys)}", globals=namespace
 )
 
-print("ITEMS\tCREATE\tACCESS\tSIZE")
 
-for power in range(0, 6):
+def do_work(info):
 
-    for factor in range(1, 10):
+    kind, power, factor = info
 
-        items = factor * 10 ** power
-        namespace["keys"] = [*{str(random()) for _ in range(items)}]
-        iterations = max(create_a.autorange()[0], create_d.autorange()[0])
-        create = create_a.timeit(iterations) / create_d.timeit(iterations) - 1
-        size = (
-            getsizeof(FrozenAutoMap(namespace["keys"]))
-            / getsizeof({k: i for i, k in enumerate(namespace["keys"])})
-            - 1
+    items = factor * 10 ** power
+    namespace["keys"] = [*{kind(random()) for _ in range(items)}]
+    iterations = max(create_a.autorange()[0], create_d.autorange()[0])
+    create = create_a.timeit(iterations) / create_d.timeit(iterations)
+    size = getsizeof(FrozenAutoMap(namespace["keys"])) / getsizeof(
+        {k: i for i, k in enumerate(namespace["keys"])}
+    )
+    iterations = max(access_a.autorange()[0], access_d.autorange()[0])
+    access = access_a.timeit(iterations) / access_d.timeit(iterations)
+
+    return items, create, access, size
+
+
+print("TYPE\tITEMS\tCREATE\tACCESS\tSIZE")
+
+with Pool() as pool:
+    for kind in (str,):
+        total_create = []
+        total_access = []
+        total_size = []
+        for items, create, access, size in pool.imap(
+            do_work, product((kind,), range(6), range(1, 10))
+        ):
+            print(
+                f"{kind.__name__}\t{items:,}\t{create-1:+.0%}\t{access-1:+.0%}\t{size-1:+.0%}",
+                flush=True,
+            )
+            total_create.append(create)
+            total_access.append(access)
+            total_size.append(size)
+
+        print(
+            f"{kind.__name__}\tMEAN\t{harmonic_mean(total_create)-1:+.0%}\t{harmonic_mean(total_access)-1:+.0%}\t{harmonic_mean(total_size)-1:+.0%}",
+            flush=True,
         )
-        iterations = max(access_a.autorange()[0], access_d.autorange()[0])
-        access = access_a.timeit(iterations) / access_d.timeit(iterations) - 1
-        print(f"{items:,}\t{create:+.0%}\t{access:+.0%}\t{size:+.0%}")

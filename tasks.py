@@ -29,7 +29,12 @@ def build(context):
 @invoke.task(build)
 def test(context):
     # context.run("mypy --strict .")
-    context.run("pytest")
+    context.run("pytest -v")
+
+
+@invoke.task(test)
+def performance(context):
+    context.run("{} performance.py".format(sys.executable))
 
 
 if (3, 6) <= sys.version_info:
