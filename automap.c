@@ -167,7 +167,7 @@ static void
 AutoMapIterator_dealloc(AutoMapIteratorObject* self)
 {
     Py_DECREF(self->keys);
-    // Py_TYPE(self)->tp_free((PyObject*) self);
+    Py_TYPE(self)->tp_free((PyObject*) self);
 }
 
 
@@ -205,13 +205,27 @@ AutoMapIterator_iternext(AutoMapIteratorObject* self)
 }
 
 
+static PyObject*
+AutoMapIterator_methods___length_hint__(AutoMapIteratorObject* self)
+{
+    return PyLong_FromSsize_t(Py_MAX(0, PyList_GET_SIZE(self->keys) - self->index));
+}
+
+
+static PyMethodDef AutoMapIterator_methods[] = {
+    {"__length_hint__", (PyCFunction) AutoMapIterator_methods___length_hint__, METH_NOARGS, NULL},
+    {NULL},
+};
+
+
 static PyTypeObject AutoMapIteratorType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_basicsize = sizeof(AutoMapIteratorObject),
     .tp_dealloc = (destructor) AutoMapIterator_dealloc,
     .tp_iter = (getiterfunc) AutoMapIterator_iter,
     .tp_iternext = (iternextfunc) AutoMapIterator_iternext,
-    .tp_name = "automap.AutoMapViewIterator",
+    .tp_methods = AutoMapIterator_methods,
+    .tp_name = "AutoMapIterator",
 };
 
 
@@ -329,6 +343,7 @@ static void
 AutoMapView_dealloc(AutoMapViewObject* self)
 {
     Py_DECREF(self->map);
+    Py_TYPE(self)->tp_free((PyObject*) self);
 }
 
 
@@ -394,7 +409,7 @@ static PyTypeObject AutoMapViewType = {
     .tp_dealloc = (destructor) AutoMapView_dealloc,
     .tp_iter = (getiterfunc) AutoMapView_iter,
     .tp_methods = AutoMapView_methods,
-    .tp_name = "automap.AutoMapView",
+    .tp_name = "AutoMapView",
     .tp_richcompare = (richcmpfunc) AutoMapView_richcompare,
 };
 
@@ -997,10 +1012,12 @@ PyInit_automap(void)
     PyObject* automap = PyModule_Create(&automap_module);
     if (
         !automap
-        || PyType_Ready(&FrozenAutoMapType)
-        || PyModule_AddObject(automap, "FrozenAutoMap", (PyObject*) &FrozenAutoMapType)
         || PyType_Ready(&AutoMapType)
+        || PyType_Ready(&AutoMapIteratorType)
+        || PyType_Ready(&AutoMapViewType)
+        || PyType_Ready(&FrozenAutoMapType)
         || PyModule_AddObject(automap, "AutoMap", (PyObject*) &AutoMapType)
+        || PyModule_AddObject(automap, "FrozenAutoMap", (PyObject*) &FrozenAutoMapType)
     ) {
         return NULL;
     }
