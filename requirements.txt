@@ -5,3 +5,4 @@ invoke
 pytest
 setuptools
 twine; python_version >= '3.6'
+typing
