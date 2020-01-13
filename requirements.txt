@@ -1,8 +1,7 @@
 attrs
-black; python_version >= '3.6'
+black
 hypothesis
 invoke
 pytest
 setuptools
-twine; python_version >= '3.6'
-typing
+twine

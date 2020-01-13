@@ -14,7 +14,7 @@ setup(
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
     name="automap",
-    python_requires=">=3.5.0",
+    python_requires=">=3.6.0",
     url="https://github.com/brandtbucher/automap",
     version="0.3.1",
 )
