@@ -1,7 +1,9 @@
 attrs
+auditwheel
 black
 hypothesis
 invoke
 pytest
 setuptools
 twine
+wheel==0.31.1

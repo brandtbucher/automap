@@ -97,20 +97,18 @@ matrix:
 # Needed for Windows. Remove once Travis fixes this (or pypi deploy works):
 # https://travis-ci.community/t/current-known-issues-please-read-this-before-posting-a-new-topic/264/10
 # Not a dealbreaker, since secrets are disabled on forks/PRs. Just nice to have.
-# filter_secrets: false
+filter_secrets: false
 
-# install:
-#   - pip install --upgrade -r requirements.txt
-#   # We need to pin wheel (ha) for auditwheel to work properly:
-#   - pip install auditwheel codecov pytest-cov setuptools twine wheel==0.31.1
-#   # Build and test wheels and source distributions:
-#   - python setup.py develop sdist bdist_wheel
-#   - python fix_wheels.py
-#   - pip install --force-reinstall --no-cache-dir .
-#   - pip install --force-reinstall --no-cache-dir dist/*.tar.gz
-#   - pip install --force-reinstall --no-cache-dir dist/*.whl
+install:
+  - pip install --upgrade -r requirements.txt
+  # Build and test wheels and source distributions:
+  - python setup.py develop sdist bdist_wheel
+  - python fix_wheels.py
+  - pip install --force-reinstall --no-cache-dir .
+  - pip install --force-reinstall --no-cache-dir dist/*.tar.gz
+  - pip install --force-reinstall --no-cache-dir dist/*.whl
 
-install: pip install --upgrade -r requirements.txt
+# install: pip install --upgrade -r requirements.txt
 
 script: invoke test
 
