@@ -50,9 +50,8 @@ def build(context):
     assert len(WHEELS) == len(FIXED), "We gained or lost a wheel!"
 
     context.run("twine check dist/*")
-    context.run("pip install --force-reinstall --no-cache-dir .")
-    context.run("pip install --force-reinstall --no-cache-dir dist/*.tar.gz")
-    context.run("pip install --force-reinstall --no-cache-dir dist/*.whl")
+    for build in [".", *glob("dist/*.tar.gz"), *glob("dist/*.whl")]:
+        context.run(f"pip install --force-reinstall --no-cache-dir {build}")
 
 
 @task(build)
