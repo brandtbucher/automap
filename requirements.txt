@@ -3,7 +3,7 @@ auditwheel
 black
 hypothesis
 invoke
-pytest
+pytest>=4.3.1
 setuptools
 twine
 wheel==0.31.1
