@@ -89,10 +89,10 @@ matrix:
         - export PATH=/Users/travis/.pyenv/shims:$PATH PYENV_VERSION=3.6.8
         - pyenv install $PYENV_VERSION
 
-# env:
-#   global:
-#     - TWINE_USERNAME=brandtbucher
-#     - secure: ...
+env:
+  global:
+    - TWINE_USERNAME=brandtbucher
+    - secure: "O01Wfk/mDdmH+mXFabZwIUBrriduFZlfMCnCEOTVxiSSO3tct8mbtVThjp4XQINI2fMvZ3xcwyXyNNGqkseZYFN0J9ks9IP+J/2Rq79WKf9WQSMJAWhkEwoDQ9jVZq6biGkuJas/XJtixC/AXuNyXyt5HeTma9y4RuaOZNO9rqBdEocspaS+rij0cevW7dqN1WPzMxq2cNxa7Gh55BbLTXF9aiHBEsUX55nHsn5wbDnaNI0IvgweXNjF0cj8+bRQnRO1CP+U0U9D4XjPhesrfk9clavz5S7z9C1cW3EhkpDKoEv6HeLC4mAZpBhlmilSxObCalj3IFqg3pdXSl+7PGbgVeAzZvzhuU8VfZ9/IynMb/9rqL79BJP1xLW4PQbtSSyIxJ8DU2bMDp0NvA35Sa1e+ScVSOad+nB3Nghd34puAdXVYsUIMNL/4k4yTlgIBkLretwnTF7qgml7ZYPceYEyDYw6riRXKmv0cyKSREz/Coz0HFmKwY3JHM85Fg8NidsrI+HETGJAk6DLGwHbZJGBOhm9UUlFRYd+WEq7PmJ2CouNRcpFfJiALstt+wXW1ybWA42kWKYEL40nEilm5f1wL3H+ZDDWQ+ZUvg0ArdWeXInGJwJ7tmk2PpdDbukPsMJBui9m667DJ07i/giXwgkIsaGzZha5RZML8tth0q0="
 
 # Needed for Windows. Remove once Travis fixes this (or pypi deploy works):
 # https://travis-ci.community/t/current-known-issues-please-read-this-before-posting-a-new-topic/264/10
@@ -101,12 +101,12 @@ filter_secrets: false
 
 script: invoke test
 
-# deploy:
-#   # The "pypi" provider breaks on Windows right now, so we need to use "script":
-#   # https://github.com/travis-ci/dpl/issues/955
-#   provider: script
-#   skip_cleanup: true
-#   script: twine upload --skip-existing dist/*
-#   on:
-#     repo: brandtbucher/pycapi
-#     branch: master
+deploy:
+  # The "pypi" provider breaks on Windows right now, so we need to use "script":
+  # https://github.com/travis-ci/dpl/issues/955
+  provider: script
+  skip_cleanup: true
+  script: twine upload --skip-existing dist/*
+  on:
+    repo: brandtbucher/automap
+    tags: true
