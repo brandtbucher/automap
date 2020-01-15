@@ -1,4 +1,4 @@
-attrs
+attrs>=19.2.0
 auditwheel
 black
 hypothesis
