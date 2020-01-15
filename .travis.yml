@@ -99,6 +99,8 @@ env:
 # Not a dealbreaker, since secrets are disabled on forks/PRs. Just nice to have.
 filter_secrets: false
 
+install: pip install -r requirements.txt
+
 script: invoke test
 
 deploy:
