@@ -14,7 +14,8 @@ What we don't care about:
   - Memory usage. Python's dicts are used literally everywhere, so a tiny
     reduction in the footprint of the average dict results in a significant gain
     for *all* Python programs. We are happy to instead trade a few extra bytes
-    of RAM for a sparser, faster, more cache-friendly hash table design.
+    of RAM for a more cache-friendly hash table design. Since we don't store
+    values, we are still smaller on average!
 
   - Worst-case performance. Again, Python's dicts are used for literally
     everything, so they need to be able to gracefully handle lots of hash
@@ -39,10 +40,6 @@ What we do care about:
     wheel. We use a list since it allows us to grow more efficiently.
 
 So what we need is a hash table that's easy to insert into and easy to scan.
-Since we don't care about memory usage, we're just going to use a table that's
-around 50% larger than the one a normal dict uses, allocating enough space for
-2-4 times the number of entries, plus a little extra (seven slots, to be exact;
-this will make sense later).
 
 Here's how it works. A vanilla Python dict of the form:
 
@@ -69,18 +66,18 @@ literally based on random number generation)!
 
 To contrast, the same table looks something like this for us:
 
-Indices: [2,  --, --, --, --, --,  1,  0, --, --, --, --, --, --, --, --, --, --, --, --, --, --, --]
-Hashes:  [40, --, --, --, --, --, 30, 15, --, --, --, --, --, --, --, --, --, --, --, --, --, --, --]
+Indices: [2,  --,  1,  0, --, --, --, --, --, --, --, --, --, --, --, --, --, --, --]
+Hashes:  [40, --, 30, 15, --, --, --, --, --, --, --, --, --, --, --, --, --, --, --]
 
 Keys:    [ a,  b,  c]
 
 Right away you can see that we don't need to store the values, because they
 match the indices (by design).
 
-Notice that even though we allocated enough space in our table for 23 entries,
-we still insert them into the same initial positions as the dict, at position
-HASH % 8.  This leaves the whole 15-element tail chunk of the table free for
-colliding keys. So, what's a good collision-resolution strategy?
+Notice that even though we allocated enough space in our table for 19 entries,
+we still insert them into initial position HASH % 4.  This leaves the whole
+15-element tail chunk of the table free for colliding keys. So, what's a good
+collision-resolution strategy?
 
 NEXT_INDEX = CURRENT_INDEX + 1
 
@@ -114,7 +111,7 @@ is what really gives us our awesome performance.
 
 /* Experimentation shows that these values work well: */
 
-# define LOAD 0.90
+# define LOAD 0.9
 # define SCAN 16
 
 # define KEYS            'K'
@@ -130,7 +127,7 @@ typedef struct {
     Py_ssize_t index;
 } entry;
 
-
+ 
 typedef struct {
     PyObject_VAR_HEAD
     Py_ssize_t size;
