@@ -99,17 +99,6 @@ matrix:
 # Not a dealbreaker, since secrets are disabled on forks/PRs. Just nice to have.
 filter_secrets: false
 
-install:
-  - pip install --upgrade -r requirements.txt
-  # Build and test wheels and source distributions:
-  - python setup.py develop sdist bdist_wheel
-  - python fix_wheels.py
-  - pip install --force-reinstall --no-cache-dir .
-  - pip install --force-reinstall --no-cache-dir dist/*.tar.gz
-  - pip install --force-reinstall --no-cache-dir dist/*.whl
-
-# install: pip install --upgrade -r requirements.txt
-
 script: invoke test
 
 # deploy:
