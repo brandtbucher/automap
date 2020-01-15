@@ -6,7 +6,7 @@ from invoke import task
 
 
 @task
-def clean(context) -> None:
+def clean(context):
     context.run(f"{executable} setup.py develop --uninstall")
     for artifact in ("*.egg-info", "*.so", "build", "dist"):
         context.run("rm -rf {artifact}".format(artifact=artifact))
@@ -14,7 +14,7 @@ def clean(context) -> None:
 
 
 @task(clean)
-def build(context) -> None:
+def build(context):
     context.run("pip install -r requirements.txt")
     context.run(
         f"{executable} setup.py develop sdist bdist_wheel",
@@ -56,15 +56,15 @@ def build(context) -> None:
 
 
 @task(build)
-def test(context) -> None:
+def test(context):
     context.run("pytest -v")
 
 
 @task(test)
-def performance(context) -> None:
+def performance(context):
     context.run("{} performance.py".format(executable))
 
 
 @task(test)
-def release(context) -> None:
+def release(context):
     context.run("twine upload --skip-existing dist/*")
