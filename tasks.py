@@ -42,14 +42,14 @@ def build(context):
         env={"CPPFLAGS": "-Werror -Wno-deprecated-declarations"},
         replace_env=False,
     )
-    if platform == "linux":
-        from sys import abiflags
+    # if platform == "linux":
+    #     from sys import abiflags
 
-        for so in glob("*.so"):
-            context.run(
-                f"patchelf --remove-needed libpython{get_python_version()}{abiflags}.so.1.0 {so}",
-                echo=True,
-            )
+    #     for so in glob("*.so"):
+    #         context.run(
+    #             f"patchelf --remove-needed libpython{get_python_version()}{abiflags}.so.1.0 {so}",
+    #             echo=True,
+    #         )
     context.run(f"{executable} setup.py bdist_wheel", echo=True)
     WHEELS = glob("dist/*.whl")
     assert WHEELS, "No wheels in dist!"

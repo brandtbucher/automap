@@ -4,7 +4,7 @@ black
 hypothesis
 invoke
 pytest>=4.3.1
-setuptools
+setuptools>=45.0.0
 twine
 wheel==0.31.1; sys_platform=="linux"
 wheel>=0.33.5; sys_platform!="linux"
