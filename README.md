@@ -33,7 +33,7 @@ Examples
 >>> a = FrozenAutoMap("AAA")
 Traceback (most recent call last):
   File "<stdin>", line 1, in <module>
-KeyError: 'A'
+ValueError: 'A'
 >>> a = FrozenAutoMap("ABC")
 >>> a
 automap.FrozenAutoMap(['A', 'B', 'C'])
@@ -114,9 +114,9 @@ automap.AutoMap(['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'])
 Performance
 -----------
 
-Tests show string-keyed `AutoMap` objects being created 80% faster and accessed
-10% faster than the equivalent `dict` construction. They tend to take up
-slightly less memory, on average. You can run `invoke performance` from this
+Tests show string-keyed `AutoMap` objects being created 75% faster and accessed
+10% faster than the equivalent `dict` construction. They tend to take up the
+same amount of memory, on average. You can run `invoke performance` from this
 repository to see the comparison on your machine.
 
 More details on the design can be found in `automap.c`.

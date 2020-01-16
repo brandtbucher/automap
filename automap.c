@@ -15,7 +15,7 @@ What we don't care about:
     reduction in the footprint of the average dict results in a significant gain
     for *all* Python programs. We are happy to instead trade a few extra bytes
     of RAM for a more cache-friendly hash table design. Since we don't store
-    values, we are still smaller on average!
+    values, we are still close to the same size on average!
 
   - Worst-case performance. Again, Python's dicts are used for literally
     everything, so they need to be able to gracefully handle lots of hash
@@ -127,7 +127,7 @@ typedef struct {
     Py_ssize_t index;
 } entry;
 
- 
+
 typedef struct {
     PyObject_VAR_HEAD
     Py_ssize_t size;

@@ -1,9 +1,11 @@
+from functools import reduce
 from multiprocessing import Pool
 from statistics import stdev, harmonic_mean
 from random import random
 from sys import argv, getsizeof
 from timeit import Timer
 from itertools import product
+from operator import mul
 
 from automap import FrozenAutoMap
 
@@ -37,6 +39,11 @@ def do_work(info):
 
 print("TYPE\tITEMS\tCREATE\tACCESS\tSIZE")
 
+
+def geometric_mean(xs):
+    return reduce(mul, xs) ** (1 / len(xs))
+
+
 with Pool() as pool:
     for kind in (str,):
         total_create = []
@@ -52,8 +59,7 @@ with Pool() as pool:
             total_create.append(create)
             total_access.append(access)
             total_size.append(size)
-
         print(
-            f"{kind.__name__}\tMEAN\t{harmonic_mean(total_create)-1:+.0%}\t{harmonic_mean(total_access)-1:+.0%}\t{harmonic_mean(total_size)-1:+.0%}",
+            f"{kind.__name__}\tMEAN\t{geometric_mean(total_create)-1:+.0%}\t{geometric_mean(total_access)-1:+.0%}\t{geometric_mean(total_size)-1:+.0%}",
             flush=True,
         )
