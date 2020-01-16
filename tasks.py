@@ -1,20 +1,31 @@
 from glob import glob
 from os import environ, remove, replace
+from subprocess import run
 from sys import executable, platform
 
 from invoke import task
 
 
+class MockContext:
+    @staticmethod
+    def run(command: str, env=None, replace_env=False) -> None:
+        if env is not None:
+            env = {**({} if replace_env else environ), **env}
+        run(command, env=env, shell=True, check=True)
+
+
 @task
 def clean(context):
+    context = MockContext()
     context.run(f"{executable} setup.py develop --uninstall")
     for artifact in ("*.egg-info", "*.so", "build", "dist"):
-        context.run("rm -rf {artifact}".format(artifact=artifact))
+        context.run(f"rm -rf {artifact}")
     context.run("black .")
 
 
 @task(clean)
 def build(context):
+    context = MockContext()
     context.run("pip install -r requirements.txt")
     context.run(
         f"{executable} setup.py develop sdist bdist_wheel",
@@ -56,14 +67,17 @@ def build(context):
 
 @task(build)
 def test(context):
+    context = MockContext()
     context.run("pytest -v")
 
 
 @task(test)
 def performance(context):
-    context.run("{} performance.py".format(executable))
+    context = MockContext()
+    context.run(f"{executable} performance.py")
 
 
 @task(test)
 def release(context):
+    context = MockContext()
     context.run("twine upload --skip-existing dist/*")
