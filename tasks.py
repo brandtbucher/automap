@@ -6,7 +6,8 @@ from operator import mul
 from os import environ, remove, replace
 from random import random
 from subprocess import run
-from sys import executable, getsizeof, platform
+from sys import abiflags, executable, getsizeof, platform
+from sysconfig import get_python_version
 from timeit import Timer
 
 from invoke import task
@@ -46,6 +47,12 @@ def build(context):
     assert WHEELS, "No wheels in dist!"
     print("Before:", *WHEELS, sep="\n - ")
     if platform == "linux":
+        for so in glob("*.so"):
+            context.run(
+                f"patchelf --remove-needed libpython{get_python_version()}{abiflags}.so {so}",
+                echo=True,
+            )
+        context.run(f"{executable} setup.py bdist_wheel", echo=True)
         # We're typically eligible for manylinux1... or at least manylinux2010.
         # This will remove the wheel if it was unchanged... but that will cause
         # our assert to fail later, which is what we want!
