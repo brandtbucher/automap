@@ -59,7 +59,6 @@ def build(context):
         # This will remove the wheel if it was unchanged... but that will cause
         # our assert to fail later, which is what we want!
         for wheel in WHEELS:
-            context.run(f"auditwheel show {wheel}", echo=True)
             context.run(f"auditwheel repair {wheel} -w dist", echo=True)
             remove(wheel)
     else:
