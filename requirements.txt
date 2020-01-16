@@ -3,6 +3,7 @@ auditwheel
 black
 hypothesis
 invoke
+pip>=19.3.0
 pytest>=4.3.1
 setuptools
 twine
