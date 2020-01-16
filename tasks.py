@@ -6,7 +6,7 @@ from operator import mul
 from os import environ, remove, replace
 from random import random
 from subprocess import run
-from sys import abiflags, executable, getsizeof, platform
+from sys import executable, getsizeof, platform
 from sysconfig import get_python_version
 from timeit import Timer
 
@@ -47,6 +47,7 @@ def build(context):
     assert WHEELS, "No wheels in dist!"
     print("Before:", *WHEELS, sep="\n - ")
     if platform == "linux":
+        from sys import abiflags
         for so in glob("*.so"):
             context.run(
                 f"patchelf --remove-needed libpython{get_python_version()}{abiflags}.so {so}",
