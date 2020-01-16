@@ -1,17 +1,16 @@
 from datetime import date, datetime
-from timeit import Timer, timeit
-from typing import Hashable, Iterable, Set, Type, TypeVar, FrozenSet, Tuple, Union
+from pickle import dumps, loads
+from timeit import Timer
+from typing import FrozenSet, Tuple, Union
 
-from hypothesis import assume, given, infer, seed, settings
-from hypothesis.strategies import from_type, frozensets, integers, sampled_from
-from pytest import mark, raises
+from hypothesis import assume, given, infer
+from pytest import raises
 
 from automap import AutoMap, FrozenAutoMap
 
 
-# Atom should just be Hashable, but hypothesis chokes on NaNs sometimes, so we
-# need to exclude float and complex... :(
-Atom = Union[bool, int, None, str, bytes, date, datetime]
+# Atom should just be Hashable, but hypothesis chokes on NaNs sometimes. :(
+Atom = Union[None, bool, bytes, complex, date, datetime, float, int, str]
 CompositeAtom = Union[Atom, Tuple[Atom, ...], FrozenSet[Atom]]
 
 
@@ -76,3 +75,10 @@ def test_issue_3(keys: FrozenSet[CompositeAtom], key: CompositeAtom):
     a |= (key,)
     with raises(ValueError):
         a |= (key,)
+
+
+@given(keys=infer)
+def test_pickle(keys: FrozenSet[CompositeAtom]):
+    assume(loads(dumps(keys)) == keys)
+    a = AutoMap(keys)
+    assert loads(dumps(a)) == a
