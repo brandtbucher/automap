@@ -54,7 +54,7 @@ matrix:
       os: windows
       before_install:
         - export PATH=/c/Python38:/c/Python38/Scripts:$PATH
-        - choco install python --version 3.8.1
+        - choco install python --version 3.8.1.20200110
 
     - name: CPython 3.7.3 on Windows 10 (64-bit)
       language: shell
@@ -75,7 +75,7 @@ matrix:
       os: windows
       before_install:
         - export PATH=/c/Python38:/c/Python38/Scripts:$PATH
-        - choco install python --version 3.8.1 --x86
+        - choco install python --version 3.8.1.20200110 --x86
 
     - name: CPython 3.7.3 on Windows 10 (32-bit)
       language: shell
