@@ -50,7 +50,7 @@ def build(context):
         from sys import abiflags
         for so in glob("*.so"):
             context.run(
-                f"patchelf --remove-needed libpython{get_python_version()}{abiflags}.so {so}",
+                f"patchelf --remove-needed libpython{get_python_version()}{abiflags}.so.1.0 {so}",
                 echo=True,
             )
         context.run(f"{executable} setup.py bdist_wheel", echo=True)
