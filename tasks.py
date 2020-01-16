@@ -26,7 +26,7 @@ def clean(context):
 @task(clean)
 def build(context):
     context = MockContext()
-    context.run("easy_install 'pip>=19.3.0'")
+    context.run("easy_install --upgrade pip")
     context.run(f"pip install -r requirements.txt")
     context.run(
         f"{executable} setup.py develop sdist bdist_wheel",
