@@ -1,9 +1,10 @@
 attrs>=19.2.0
-auditwheel
+auditwheel; sys_platform=="linux"
 black
 hypothesis
 invoke
 pytest>=4.3.1
 setuptools
 twine
-wheel>=0.33.5
+wheel==0.31.1; sys_platform=="linux"
+wheel>=0.33.5; sys_platform!="linux"
