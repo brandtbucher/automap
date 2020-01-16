@@ -26,7 +26,7 @@ def clean(context):
 @task(clean)
 def build(context):
     context = MockContext()
-    context.run("pip install -r requirements.txt")
+    context.run(f"{executable} -m pip install -r requirements.txt")
     context.run(
         f"{executable} setup.py develop sdist bdist_wheel",
         env={"CPPFLAGS": "-Werror -Wno-deprecated-declarations"},
