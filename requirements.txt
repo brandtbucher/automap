@@ -6,4 +6,4 @@ invoke
 pytest>=4.3.1
 setuptools
 twine
-wheel==0.31.1
+wheel>=0.33.5
