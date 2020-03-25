@@ -1,6 +1,9 @@
 __pycache__
+.env*
 .hypothesis
 .mypy_cache
+.patchelf
+.pyenv
 .pytest_cache
 .vscode
 build

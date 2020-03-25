@@ -3,6 +3,3 @@ black
 hypothesis
 invoke
 pytest>=4.3.1
-setuptools>=45.0.0
-twine
-wheel>=0.33.6
