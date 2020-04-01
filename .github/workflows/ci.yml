@@ -1,13 +1,18 @@
-on: [push]
-
+on:
+  release:
+    branches: [master]
+    types: [created]
+env:
+  TWINE_USERNAME: ${{secrets.TWINE_USERNAME}}
+  TWINE_PASSWORD: ${{secrets.TWINE_PASSWORD}}
 jobs:
   build:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{matrix.os}}
     steps:
     - uses: actions/checkout@v2
-    - name: configure
+    - name: CI
       shell: bash
-      run: cat ./bootstrap.sh | bash
+      run: cat bootstrap.sh | bash
