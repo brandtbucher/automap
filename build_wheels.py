@@ -24,7 +24,7 @@ DEFAULTS = {
     "test": "pip install --requirement requirements.txt && pytest",
     "test-if": 'true',
     "upload": "pip install --upgrade twine && twine upload --skip-existing dist/*",
-    "upload-if": 'test "$(git tag --points-at HEAD)"',
+    "upload-if": 'true',
     "wheels": " ".join(sorted(WHEELS)),
     "windows": '32 64' 
 }
