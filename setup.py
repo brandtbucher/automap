@@ -16,5 +16,5 @@ setup(
     name="automap",
     python_requires=">=3.6.0",
     url="https://github.com/brandtbucher/automap",
-    version="0.4.7",
+    version="0.4.8",
 )
