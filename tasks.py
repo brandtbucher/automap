@@ -37,52 +37,7 @@ def build(context):
     context = MockContext()
     context.run(f"{executable} -m pip install --upgrade pip", echo=True)
     context.run(f"pip install -r requirements.txt", echo=True)
-    context.run(
-        f"{executable} setup.py develop sdist",
-        env={"CPPFLAGS": "-Werror -Wno-deprecated-declarations"},
-        replace_env=False,
-    )
-    if platform == "linux":
-        from sys import abiflags
-
-        for so in glob("*.so"):
-            context.run(
-                f"patchelf --remove-needed libpython{get_python_version()}{abiflags}.so.1.0 {so}",
-                echo=True,
-            )
-    context.run(f"{executable} setup.py bdist_wheel", echo=True)
-    WHEELS = glob("dist/*.whl")
-    assert WHEELS, "No wheels in dist!"
-    print("Before:", *WHEELS, sep="\n - ")
-    if platform == "linux":
-        # We're typically eligible for manylinux1... or at least manylinux2010.
-        # This will remove the wheel if it was unchanged... but that will cause
-        # our assert to fail later, which is what we want!
-        context.run(f"pip install -r requirements-audit.txt", echo=True)
-        for wheel in WHEELS:
-            context.run(f"auditwheel repair {wheel} -w dist", echo=True)
-            remove(wheel)
-    else:
-        if platform == "darwin":
-            # We lie here, and say our 10.9 64-bit build is a 10.6 32/64-bit one.
-            # This is because pip is conservative in what wheels it will use, but
-            # Python installations are EXTREMELY liberal in their macOS support.
-            # A typical user may be running a 32/64 Python built for 10.6.
-            # In reality, we shouldn't worry about supporting 32-bit Snow Leopard.
-            for wheel in WHEELS:
-                fake = wheel.replace("macosx_10_9_x86_64", "macosx_10_6_intel")
-                replace(wheel, fake)
-                assert (
-                    wheel != fake or "TRAVIS" not in environ
-                ), "We expected a macOS 10.9 x86_64 build!"
-        # Windows is fine.
-    FIXED = glob("dist/*.whl")
-    print("After:", *FIXED, sep="\n - ")
-    assert len(WHEELS) == len(FIXED), "We gained or lost a wheel!"
-
-    context.run("twine check dist/*", echo=True)
-    for dist in [".", *glob("dist/*.tar.gz"), *glob("dist/*.whl")]:
-        context.run(f"pip install --force-reinstall --no-cache-dir {dist}", echo=True)
+    context.run(f"{executable} setup.py develop")
 
 
 @task(build)
