@@ -5,7 +5,7 @@
 automap
 =======
 
-[![latest version](https://img.shields.io/github/release-pre/brandtbucher/automap.svg?style=for-the-badge&label=latest)![latest release date](https://img.shields.io/github/release-date-pre/brandtbucher/automap.svg?style=for-the-badge&label=released)](https://github.com/brandtbucher/automap/releases)[![build status](https://img.shields.io/travis/com/brandtbucher/automap/master.svg?style=for-the-badge)](https://travis-ci.com/brandtbucher/automap/branches)[![issues](https://img.shields.io/github/issues-raw/brandtbucher/automap.svg?label=issues&style=for-the-badge)](https://github.com/brandtbucher/automap/issues)
+[![latest version](https://img.shields.io/github/release-pre/brandtbucher/automap.svg?style=for-the-badge&label=latest)![latest release date](https://img.shields.io/github/release-date-pre/brandtbucher/automap.svg?style=for-the-badge&label=released)](https://github.com/brandtbucher/automap/releases)[![build status](https://img.shields.io/github/workflow/status/brandtbucher/automap/CI/master.svg?style=for-the-badge)](https://github.com/brandtbucher/automap/actions)[![issues](https://img.shields.io/github/issues-raw/brandtbucher/automap.svg?label=issues&style=for-the-badge)](https://github.com/brandtbucher/automap/issues)
 
 <br>
 
