@@ -1,15 +1,18 @@
-on: [pull_request, push]
+on:
+  pull_request:
+  push:
+  release:
+    types: [published]
 jobs:
-  build_sdist:
+  build_source:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
       - run: python setup.py sdist
       - uses: actions/upload-artifact@v2
         with:
+          name: dist
           path: dist/*
   build_wheels:
     strategy:
@@ -19,8 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
       - run: pip install cibuildwheel
       - run: cibuildwheel
         env:
@@ -29,4 +30,19 @@ jobs:
           CIBW_TEST_COMMAND: pytest {project}
       - uses: actions/upload-artifact@v2
         with:
+          name: dist
           path: wheelhouse/*
+  upload_pypi:
+    needs: [build_source, build_wheels]
+    runs-on: ubuntu-latest
+    # if: github.event_name == "release" && github.event.action == "published"
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
+          repository_url: https://test.pypi.org/legacy
