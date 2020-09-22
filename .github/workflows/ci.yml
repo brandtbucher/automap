@@ -1,10 +1,12 @@
+name: CI
 on:
   pull_request:
   push:
   release:
     types: published
 jobs:
-  build_source:
+  tar_gz:
+    name: Package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
@@ -14,26 +16,28 @@ jobs:
         with:
           name: dist
           path: dist
-  build_and_test_wheels:
+  whl:
+    name: Build - ${{ matrix.os }} - Python 3.${{ matrix.minor }}
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-        build: [cp36-*, cp37-*, cp38-*]
-    runs-on: ${{ matrix.os }}
+        os: [macOS, Ubuntu, Windows]
+        minor: [6, 7, 8]
+    runs-on: ${{ matrix.os }}-latest
     steps:
       - uses: actions/checkout@master
       - uses: actions/setup-python@master
       - run: pip install cibuildwheel
       - run: cibuildwheel --output-dir dist
         env:
-          CIBW_BUILD: ${{ matrix.build }}
+          CIBW_BUILD: cp3${{ matrix.minor }}-*
           CIBW_BEFORE_TEST: pip install -r {project}/requirements.txt
           CIBW_TEST_COMMAND: pytest {project}
       - uses: actions/upload-artifact@master
         with:
           name: dist
           path: dist
-  publish_release:
+  upload:
+    name: Publish
     if: github.event_name == 'release' && github.event.action == 'published'
     needs: [build_source, build_and_test_wheels]
     runs-on: ubuntu-latest
