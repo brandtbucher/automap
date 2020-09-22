@@ -7,10 +7,10 @@ jobs:
   build_source:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout
+      - uses: actions/setup-python
       - run: python setup.py sdist
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact
         with:
           name: dist
           path: dist
@@ -18,18 +18,18 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
-        cibw_build: [cp36-*, cp37-*, cp38-*]
+        build: [cp36-*, cp37-*, cp38-*]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout
+      - uses: actions/setup-python
       - run: pip install cibuildwheel
       - run: cibuildwheel --output-dir dist
         env:
-          CIBW_BUILD: ${{ matrix.cibw_build }}
+          CIBW_BUILD: ${{ matrix.build }}
           CIBW_BEFORE_TEST: pip install -r {project}/requirements.txt
           CIBW_TEST_COMMAND: pytest {project}
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact
         with:
           name: dist
           path: dist
@@ -38,11 +38,11 @@ jobs:
     needs: [build_source, build_and_test_wheels]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact
         with:
           name: dist
           path: dist
       - uses: pypa/gh-action-pypi-publish@master
         with:
-          user: __token__
           password: ${{ secrets.PYPI_TOKEN }}
+          skip_existing: true
