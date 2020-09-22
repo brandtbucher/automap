@@ -14,10 +14,11 @@ jobs:
         with:
           name: dist
           path: dist/*
-  build_wheels:
+  build_and_test_wheels:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
+        cibw_build: [cp36-*, cp37-*, cp38-*]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -25,17 +26,17 @@ jobs:
       - run: pip install cibuildwheel
       - run: cibuildwheel
         env:
-          CIBW_BUILD: cp36-* cp37-* cp38-*
+          CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_BEFORE_TEST: pip install -r {project}/requirements.txt
           CIBW_TEST_COMMAND: pytest {project}
       - uses: actions/upload-artifact@v2
         with:
           name: dist
           path: wheelhouse/*
-  upload_pypi:
-    needs: [build_source, build_wheels]
+  publish_release:
+    needs: [build_source, build_and_test_wheels]
     runs-on: ubuntu-latest
-    # if: github.event_name == "release" && github.event.action == "published"
+    if: github.event_name == "release" && github.event.action == "published"
     steps:
       - uses: actions/download-artifact@v2
         with:
@@ -44,5 +45,4 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@master
         with:
           user: __token__
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository_url: https://test.pypi.org/legacy/
+          password: ${{ secrets.PYPI_TOKEN }}
