@@ -17,7 +17,7 @@ jobs:
           name: dist
           path: dist
   whl:
-    name: Build - ${{ matrix.os }} - Python 3.${{ matrix.minor }}
+    name: Build / ${{ matrix.os }} / Python 3.${{ matrix.minor }}
     strategy:
       matrix:
         os: [macOS, Ubuntu, Windows]
