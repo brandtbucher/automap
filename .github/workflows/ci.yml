@@ -13,7 +13,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: dist
-          path: dist/*
+          path: dist
   build_and_test_wheels:
     strategy:
       matrix:
@@ -32,11 +32,11 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: dist
-          path: wheelhouse/*
+          path: wheelhouse
   publish_release:
+    if: github.event_name == 'release' && github.event.action == 'published'
     needs: [build_source, build_and_test_wheels]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' && github.event.action == 'published'
     steps:
       - uses: actions/download-artifact@v2
         with:
