@@ -1036,7 +1036,8 @@ len_compare:
         case Py_NE:
             return PyBool_FromLong(self->len != len);
         default:
-            Py_UNREACHABLE();
+            // Py_UNREACHABLE() isn't available in Python 3.6...
+            abort();
     }
 }
 
