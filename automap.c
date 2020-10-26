@@ -1,6 +1,7 @@
 // TODO: Tests, group similar functionality, make copies faster.
 // TODO: Check refcounts when calling into hash and comparison functions.
 // TODO: Check allocation and cleanup.
+// TODO: Optimize lookups for tableless maps.
 
 
 /*******************************************************************************
@@ -130,6 +131,7 @@ typedef struct {
 
 typedef struct {
     PyObject_VAR_HEAD
+    Py_ssize_t len;
     Py_ssize_t size;
     entry *entries;
     PyObject* keys;
@@ -146,7 +148,7 @@ typedef struct {
 typedef struct {
     PyObject_VAR_HEAD
     char kind;
-    PyObject* keys;
+    AutoMapObject* map;
     Py_ssize_t index;
 } AutoMapIteratorObject;
 
@@ -158,13 +160,14 @@ static PyTypeObject FrozenAutoMapType;
 
 
 static PyObject* intcache = NULL;
+static Py_ssize_t count = 0;
 
 
 static void
 AutoMapIterator_dealloc(AutoMapIteratorObject* self)
 {
-    Py_DECREF(self->keys);
-    Py_TYPE(self)->tp_free((PyObject*) self);
+    Py_DECREF(self->map);
+    Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 
@@ -179,25 +182,26 @@ AutoMapIterator_iter(AutoMapIteratorObject* self)
 static PyObject*
 AutoMapIterator_iternext(AutoMapIteratorObject* self)
 {
-    if (self->index == PyList_GET_SIZE(self->keys)) {
+    if (self->index == self->map->len) {
         return NULL;
     }
     PyObject *yield;
     if (self->kind == ITEMS) {
         yield = PyTuple_Pack(
             2,
-            PyList_GET_ITEM(self->keys, self->index),
+            PySequence_Fast_GET_ITEM(self->map->keys, self->index),
             PyList_GET_ITEM(intcache, self->index)
         );
     }
     else if (self->kind == KEYS) {
-        yield = PyList_GET_ITEM(self->keys, self->index);
+        yield = PySequence_Fast_GET_ITEM(self->map->keys, self->index);
+        Py_INCREF(yield);
     }
     else {
         yield = PyList_GET_ITEM(intcache, self->index);
+        Py_INCREF(yield);
     }
     self->index++;
-    Py_INCREF(yield);
     return yield;
 }
 
@@ -205,7 +209,7 @@ AutoMapIterator_iternext(AutoMapIteratorObject* self)
 static PyObject*
 AutoMapIterator_methods___length_hint__(AutoMapIteratorObject* self)
 {
-    return PyLong_FromSsize_t(Py_MAX(0, PyList_GET_SIZE(self->keys) - self->index));
+    return PyLong_FromSsize_t(Py_MAX(0, self->map->len - self->index));
 }
 
 
@@ -227,16 +231,16 @@ static PyTypeObject AutoMapIteratorType = {
 
 
 static PyObject*
-viewiter(PyObject* keys, int kind) {
+viewiter(AutoMapObject* map, int kind) {
     AutoMapIteratorObject* self = PyObject_New(AutoMapIteratorObject, &AutoMapIteratorType);
     if (!self) {
         return NULL;
     }
     self->kind = kind;
-    self->keys = keys;
+    self->map = map;
     self->index = 0;
-    Py_INCREF(keys);
-    return (PyObject*) self;
+    Py_INCREF(map);
+    return (PyObject*)self;
 }
 
 
@@ -327,7 +331,7 @@ static PyNumberMethods AutoMapView_as_number = {
 static int
 AutoMapView_contains(AutoMapViewObject* self, PyObject* other)
 {
-    return PySequence_Contains((PyObject*) self->map, other);
+    return PySequence_Contains((PyObject*)self->map, other);
 }
 
 
@@ -340,31 +344,28 @@ static void
 AutoMapView_dealloc(AutoMapViewObject* self)
 {
     Py_DECREF(self->map);
-    Py_TYPE(self)->tp_free((PyObject*) self);
+    Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 
 static PyObject*
 AutoMapView_iter(AutoMapViewObject* self)
 {
-    if (self->kind == KEYS) {
-        return PyObject_GetIter(self->map->keys);
-    }
-    return viewiter(self->map->keys, self->kind);
+    return viewiter(self->map, self->kind);
 }
 
 
 static PyObject*
 AutoMapView_methods___length_hint__(AutoMapViewObject* self)
 {
-    return PyLong_FromSsize_t(PyList_GET_SIZE(self->map->keys));
+    return PyLong_FromSsize_t(self->map->len);
 }
 
 
 static PyObject*
 AutoMapView_methods_isdisjoint(AutoMapViewObject* self, PyObject* other)
 {
-    PyObject* intersection = PyNumber_And((PyObject*) self, other);
+    PyObject* intersection = PyNumber_And((PyObject*)self, other);
     PyObject* result = PyObject_IsTrue(intersection) ? Py_True : Py_False;
     Py_DECREF(intersection);
     Py_INCREF(result);
@@ -382,7 +383,7 @@ static PyMethodDef AutoMapView_methods[] = {
 static PyObject*
 AutoMapView_richcompare(AutoMapViewObject* self, PyObject* other, int op)
 {
-    PyObject* left = PySet_New((PyObject*) self);
+    PyObject* left = PySet_New((PyObject*)self);
     if (!left) {
         return NULL;
     }
@@ -414,14 +415,14 @@ static PyTypeObject AutoMapViewType = {
 static PyObject*
 view(AutoMapObject* map, int kind)
 {
-    AutoMapViewObject* self = (AutoMapViewObject*) PyObject_New(AutoMapViewObject, &AutoMapViewType);
+    AutoMapViewObject* self = (AutoMapViewObject*)PyObject_New(AutoMapViewObject, &AutoMapViewType);
     if (!self) {
         return NULL;
     }
     self->kind = kind;
     self->map = map;
     Py_INCREF(map);
-    return (PyObject*) self;
+    return (PyObject*)self;
 }
 
 
@@ -434,14 +435,13 @@ lookup_hash(AutoMapObject* self, PyObject* key, Py_hash_t hash)
     Py_ssize_t mask = self->size - 1;
     Py_hash_t mixin = Py_ABS(hash);
     Py_hash_t h;
-    Py_ssize_t i;
     Py_ssize_t stop;
+    PyObject **items = PySequence_Fast_ITEMS(self->keys);
     for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + (mixin >>= 1) + 1) & mask) {
         for (stop = index + SCAN; index < stop; index++) {
             h = entries[index].hash;
             if (h == hash) {
-                i = entries[index].index;
-                guess = PyList_GET_ITEM(self->keys, i);
+                guess = items[entries[index].index];
                 if (guess == key) {
                     /* Hit. */
                     return index;
@@ -467,6 +467,16 @@ lookup_hash(AutoMapObject* self, PyObject* key, Py_hash_t hash)
 
 static Py_ssize_t
 lookup(AutoMapObject* self, PyObject* key) {
+    if (self->keys == intcache && PyLong_CheckExact(key)) {
+        Py_ssize_t n = PyLong_AsSsize_t(key);
+        if (n < 0 || self->len <= n) {
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+            }
+            return -1;
+        }
+        return n;
+    }
     Py_hash_t hash = PyObject_Hash(key);
     if (hash == -1) {
         return -1;
@@ -491,12 +501,36 @@ _insert(AutoMapObject* self, PyObject* key, Py_ssize_t offset, Py_hash_t hash, i
         PyErr_SetObject(PyExc_ValueError, key);
         return -1;
     }
-    entries[index].hash = hash;
     entries[index].index = offset;
-    if (append && PyList_Append(self->keys, key)) {
-        entries[index].hash = -1;
-        return -1;
+    if (append) {
+        PyObject *keys;
+        if (self->keys == intcache) {
+            int result = PyObject_RichCompareBool(key, PyList_GET_ITEM(intcache, self->len), Py_EQ);
+            if (result < 0) {
+                return -1;
+            }
+            if (result) {
+                entries[index].hash = hash;
+                return 0;
+            }
+            keys = PyList_GetSlice(intcache, 0, self->len);
+            if (!keys) {
+                return -1;
+            }
+            Py_SETREF(self->keys, keys);
+        }
+        else if (!PyList_CheckExact(self->keys)) {
+            keys = PySequence_List(self->keys);
+            if (!keys) {
+                return -1;
+            }
+            Py_SETREF(self->keys, keys);
+        }
+        if (PyList_Append(self->keys, key)) {
+            return -1;
+        }
     }
+    entries[index].hash = hash;
     return 0;
 }
 
@@ -504,7 +538,7 @@ _insert(AutoMapObject* self, PyObject* key, Py_ssize_t offset, Py_hash_t hash, i
 static int
 insert(AutoMapObject* self, Py_ssize_t offset)
 {
-    PyObject* key = PyList_GET_ITEM(self->keys, offset);
+    PyObject* key = PySequence_Fast_GET_ITEM(self->keys, offset);
     Py_hash_t hash = PyObject_Hash(key);
     if (hash == -1) {
         return -1;
@@ -516,7 +550,7 @@ insert(AutoMapObject* self, Py_ssize_t offset)
 static int
 insert_hash(AutoMapObject* self, Py_ssize_t offset, Py_hash_t hash)
 {
-    return _insert(self, PyList_GET_ITEM(self->keys, offset), offset, hash, 0);
+    return _insert(self, PySequence_Fast_GET_ITEM(self->keys, offset), offset, hash, 0);
 }
 
 
@@ -527,19 +561,13 @@ insert_key(AutoMapObject* self, PyObject* key)
     if (hash == -1) {
         return -1;
     }
-    return _insert(self, key, PyList_GET_SIZE(self->keys), hash, 1);
+    return _insert(self, key, self->len, hash, 1);
 }
 
 
 static int
 fill_intcache(Py_ssize_t size)
 {
-    if (!intcache) {
-        intcache = PyList_New(0);
-        if (!intcache) {
-            return -1;
-        }
-    }
     PyObject* item;
     for (Py_ssize_t index = PyList_GET_SIZE(intcache); index < size; index++) {
         item = PyLong_FromSsize_t(index);
@@ -605,22 +633,58 @@ grow(AutoMapObject* self, Py_ssize_t needed)
 static AutoMapObject*
 new(PyTypeObject* cls, PyObject* keys)
 {
-    keys = keys ? PySequence_List(keys) : PyList_New(0);
+    Py_ssize_t len;
     if (!keys) {
-        return NULL;
+        if (fill_intcache(0)) {
+            return NULL;
+        }
+        Py_INCREF(intcache);
+        keys = intcache;
+        len = 0;
     }
-    AutoMapObject* self = (AutoMapObject*) cls->tp_alloc(cls, 0);
+    else {
+        // TODO: maybe iterate here?
+        keys = PySequence_Fast(keys, "expected an iterable of keys");
+        if (!keys) {
+            return NULL;
+        }
+        len = PySequence_Fast_GET_SIZE(keys);
+        fill_intcache(len);
+        PyObject **ki = PySequence_Fast_ITEMS(keys);
+        PyObject **ii = PySequence_Fast_ITEMS(intcache);
+        PyObject *ki_i;
+        int result;
+        for (Py_ssize_t i = 0; i < len; i++) {
+            ki_i = ki[i];
+            if (!PyLong_CheckExact(ki_i)) {
+                goto non_intcache;
+            }
+            result = PyObject_RichCompareBool(ki_i, ii[i], Py_EQ);
+            if (result > 0) {
+                continue;
+            }
+            if (result < 0) {
+                PyErr_Clear();
+            }
+            goto non_intcache;
+        }
+        Py_INCREF(intcache);
+        Py_SETREF(keys, intcache);
+    }
+non_intcache:;
+    AutoMapObject* self = (AutoMapObject*)cls->tp_alloc(cls, 0);
     if (!self) {
         Py_DECREF(keys);
         return NULL;
     }
     self->keys = keys;
-    Py_ssize_t size = PyList_GET_SIZE(keys);
-    if (grow(self, size)) {
+    self->len = len;
+    count += len;
+    if (grow(self, len)) {
         Py_DECREF(self);
         return NULL;
     }
-    for (Py_ssize_t index = 0; index < size; index++) {
+    for (Py_ssize_t index = 0; index < len; index++) {
         if (insert(self, index)) {
             Py_DECREF(self);
             return NULL;
@@ -633,20 +697,23 @@ new(PyTypeObject* cls, PyObject* keys)
 static int
 extend(AutoMapObject* self, PyObject* keys)
 {
-    keys = PySequence_Fast(keys, "expected an iterable of keys.");
+    keys = PySequence_Fast(keys, "expected an iterable of keys");
     if (!keys) {
         return -1;
     }
     Py_ssize_t extendsize = PySequence_Fast_GET_SIZE(keys);
-    if (grow(self, PyList_GET_SIZE(self->keys) + extendsize)) {
+    count += extendsize;
+    if (grow(self, self->len + extendsize)) {
         Py_DECREF(keys);
         return -1;
     }
+    PyObject **items = PySequence_Fast_ITEMS(keys);
     for (Py_ssize_t index = 0; index < extendsize; index++) {
-        if (insert_key(self, PySequence_Fast_GET_ITEM(keys, index))) {
+        if (insert_key(self, items[index])) {
             Py_DECREF(keys);
             return -1;
         }
+        self->len++;
     }
     Py_DECREF(keys);
     return 0;
@@ -656,12 +723,14 @@ extend(AutoMapObject* self, PyObject* keys)
 static int
 append(AutoMapObject* self, PyObject* key)
 {
-    if (grow(self, PyList_GET_SIZE(self->keys) + 1)) {
+    count++;
+    if (grow(self, self->len + 1)) {
         return -1;
     }
     if (insert_key(self, key)) {
         return -1;
     }
+    self->len++;
     return 0;
 }
 
@@ -669,7 +738,7 @@ append(AutoMapObject* self, PyObject* key)
 static Py_ssize_t
 AutoMap_length(AutoMapObject* self)
 {
-    return PyList_GET_SIZE(self->keys);
+    return self->len;
 }
 
 
@@ -723,7 +792,7 @@ AutoMap_or(PyObject* left, PyObject* right)
         Py_DECREF(updated);
         return NULL;
     }
-    return (PyObject*) updated;
+    return (PyObject*)updated;
 }
 
 
@@ -735,8 +804,7 @@ static PyNumberMethods FrozenAutoMap_as_number = {
 static int
 AutoMap_contains(AutoMapObject* self, PyObject* key)
 {
-    Py_ssize_t result = lookup(self, key);
-    if (result < 0) {
+    if (lookup(self, key) < 0) {
         if (PyErr_Occurred()) {
             return -1;
         }
@@ -756,47 +824,69 @@ AutoMap_dealloc(AutoMapObject* self)
 {
     PyMem_Del(self->entries);
     Py_XDECREF(self->keys);
-    Py_TYPE(self)->tp_free((PyObject*) self);
+    count -= self->len;
+    if (count < PyList_GET_SIZE(intcache)) {
+        // del intcache[count:]
+        PyList_SetSlice(intcache, count, PyList_GET_SIZE(intcache), NULL);
+    }
+    Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 
 static Py_hash_t
 FrozenAutoMap_hash(AutoMapObject* self)
 {
-    PyObject *tuple = PyList_AsTuple(self->keys);
-    if (!tuple) {
-        return -1;
+    if (self->keys == intcache) {
+        return self->len;
     }
-    Py_hash_t hash = PyObject_Hash(tuple);
-    Py_DECREF(tuple);
-    return hash;
+    if (!PyTuple_CheckExact(self->keys)) {
+        PyObject *keys = PySequence_Tuple(self->keys);
+        if (!keys) {
+            return -1;
+        }
+        Py_SETREF(self->keys, keys);
+    }
+    return PyObject_Hash(self->keys);
+
 }
 
 
 static PyObject*
 AutoMap_iter(AutoMapObject* self)
 {
-    // return viewiter(self->keys, KEYS);
-    return PyObject_GetIter(self->keys);
+    return viewiter(self, KEYS);
 }
 
 
 static PyObject*
 AutoMap_methods___getnewargs__(AutoMapObject* self)
 {
-    PyObject *keys = PyList_AsTuple(self->keys);
-    if (!keys) {
-        return NULL;
+    if (self->keys == intcache) {
+        PyObject *keys = PyList_GetSlice(intcache, 0, self->len);
+        if (!keys) {
+            return NULL;
+        }
+        PyObject *newargs = PyTuple_Pack(1, keys);
+        Py_DECREF(keys);
+        return newargs;
     }
-    PyObject *pickled = PyTuple_Pack(1, keys);
-    Py_DECREF(keys);
-    return pickled;
+    return PyTuple_Pack(1, self->keys);
 }
 
 
 static PyObject*
 AutoMap_methods___reversed__(AutoMapObject* self)
 {
+    // TODO: use iterator class
+    if (self->keys == intcache) {
+        PyObject *keys = PyList_GetSlice(self->keys, 0, self->len);
+        if (!keys) {
+            return NULL;
+        }
+        PyObject *reversed = PyObject_CallMethod(keys, "__reversed__", NULL);
+        Py_DECREF(keys);
+        return reversed;
+    }
     return PyObject_CallMethod(self->keys, "__reversed__", NULL);
 }
 
@@ -804,14 +894,20 @@ AutoMap_methods___reversed__(AutoMapObject* self)
 static PyObject*
 AutoMap_methods___sizeof__(AutoMapObject* self)
 {
-    PyObject *listsizeof = PyObject_CallMethod(self->keys, "__sizeof__", NULL);
-    if (!listsizeof) {
-        return NULL;
+    Py_ssize_t listbytes;
+    if (self->keys == intcache) {
+        listbytes = 0;
     }
-    Py_ssize_t listbytes = PyLong_AsSsize_t(listsizeof);
-    Py_DECREF(listsizeof);
-    if (listbytes == -1 && PyErr_Occurred()) {
-        return NULL;
+    else {
+        PyObject *listsizeof = PyObject_CallMethod(self->keys, "__sizeof__", NULL);
+        if (!listsizeof) {
+            return NULL;
+        }
+        listbytes = PyLong_AsSsize_t(listsizeof);
+        Py_DECREF(listsizeof);
+        if (listbytes == -1 && PyErr_Occurred()) {
+            return NULL;
+        }
     }
     return PyLong_FromSsize_t(
         Py_TYPE(self)->tp_basicsize
@@ -877,38 +973,71 @@ AutoMap_new(PyTypeObject* cls, PyObject* args, PyObject* kwargs)
     if (!PyArg_UnpackTuple(args, name, 0, 1, &keys)) {
         return NULL;
     }
-    return (PyObject*) new(cls, keys);
+    return (PyObject*)new(cls, keys);
 }
 
 
 static PyObject*
 AutoMap_repr(AutoMapObject* self)
 {
-    const char *name = Py_TYPE(self)->tp_name;
-    if (PyList_GET_SIZE(self->keys)) {
-        return PyUnicode_FromFormat("%s(%R)", name, self->keys);
+    if (!self->len) {
+        return PyUnicode_FromFormat("%s()", Py_TYPE(self)->tp_name);
     }
-    return PyUnicode_FromFormat("%s()", name);
+    if (self->keys == intcache) {
+        return PyUnicode_FromFormat("%s(range(%i))", Py_TYPE(self)->tp_name, self->len);
+    }
+    return PyUnicode_FromFormat("%s(%R)", Py_TYPE(self)->tp_name, self->keys);
 }
 
 
 static PyObject*
 AutoMap_richcompare(AutoMapObject* self, PyObject* other, int op)
 {
-    if ((op != Py_EQ) && (op != Py_NE)) {
+    if (!PyObject_TypeCheck(other, &FrozenAutoMapType)) {
         Py_RETURN_NOTIMPLEMENTED;
     }
-    if ((PyObject*) self == other) {
-        return PyBool_FromLong(op == Py_EQ);
+    if ((PyObject*)self == other) {
+        return PyBool_FromLong(op == Py_EQ || op == Py_GE || op == Py_LE);
     }
-    int subclass = PyObject_TypeCheck(other, &FrozenAutoMapType);
-    if (subclass < 0) {
-        return NULL;
+    Py_ssize_t len = ((AutoMapObject*)other)->len;
+    PyObject *keys = ((AutoMapObject*)other)->keys;
+    if (self->keys == intcache && keys == intcache) {
+        goto len_compare;
     }
-    if (!subclass) {
-        Py_RETURN_NOTIMPLEMENTED;
+    assert(PyList_CheckExact(self->keys) || PyTuple_CheckExact(self->keys));
+    assert(PyList_CheckExact(keys) || PyTuple_CheckExact(keys));
+    if (Py_TYPE(self->keys) == Py_TYPE(keys) && (self->keys != intcache || keys != intcache)) {
+        return PyObject_RichCompare(self->keys, keys, op);
     }
-    return PyObject_RichCompare(self->keys, ((AutoMapObject*) other)->keys, op);
+    for (Py_ssize_t i = 0; i < Py_MIN(self->len, len); i++) {
+        int result = PyObject_RichCompareBool(
+                         PySequence_Fast_GET_ITEM(self->keys, i),
+                         PySequence_Fast_GET_ITEM(keys, i),
+                         op);
+        if (result < 0) {
+            return NULL;
+        }
+        if (!result) {
+            Py_RETURN_FALSE;
+        }
+    }
+len_compare:
+    switch (op) {
+        case Py_EQ:
+            return PyBool_FromLong(self->len == len);
+        case Py_GE:
+            return PyBool_FromLong(self->len >= len);
+        case Py_GT:
+            return PyBool_FromLong(self->len > len);
+        case Py_LE:
+            return PyBool_FromLong(self->len <= len);
+        case Py_LT:
+            return PyBool_FromLong(self->len < len);
+        case Py_NE:
+            return PyBool_FromLong(self->len != len);
+        default:
+            Py_UNREACHABLE();
+    }
 }
 
 
@@ -937,7 +1066,7 @@ AutoMap_inplace_or(AutoMapObject* self, PyObject* other)
         return NULL;
     }
     Py_INCREF(self);
-    return (PyObject*) self;
+    return (PyObject*)self;
 }
 
 
@@ -1013,9 +1142,11 @@ PyInit_automap(void)
         || PyType_Ready(&AutoMapIteratorType)
         || PyType_Ready(&AutoMapViewType)
         || PyType_Ready(&FrozenAutoMapType)
-        || PyModule_AddObject(automap, "AutoMap", (PyObject*) &AutoMapType)
-        || PyModule_AddObject(automap, "FrozenAutoMap", (PyObject*) &FrozenAutoMapType)
+        || PyModule_AddObject(automap, "AutoMap", (PyObject*)&AutoMapType)
+        || PyModule_AddObject(automap, "FrozenAutoMap", (PyObject*)&FrozenAutoMapType)
+        || !(intcache = PyList_New(0))
     ) {
+        Py_XDECREF(automap);
         return NULL;
     }
     return automap;
