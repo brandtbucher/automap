@@ -4,7 +4,7 @@ from itertools import product
 from multiprocessing import Pool
 from operator import mul
 from os import environ, remove, replace
-from random import random
+from random import random, shuffle
 from subprocess import run
 from sys import executable, getsizeof, platform
 from sysconfig import get_python_version
@@ -62,7 +62,8 @@ def do_work(info):
     )
     kind, power, factor = info
     items = factor * 10 ** power
-    namespace["keys"] = [*{kind(random()) for _ in range(items)}]
+    namespace["keys"] = [kind(_) for _ in range(items)]
+    shuffle(namespace["keys"])
     iterations = max(create_a.autorange()[0], create_d.autorange()[0])
     create = create_a.timeit(iterations) / create_d.timeit(iterations)
     size = getsizeof(FrozenAutoMap(namespace["keys"])) / getsizeof(
@@ -83,7 +84,7 @@ def performance(context):
         return reduce(mul, xs) ** (1 / len(xs))
 
     with Pool() as pool:
-        for kind in (str,):
+        for kind in (str, int):
             total_create = []
             total_access = []
             total_size = []
