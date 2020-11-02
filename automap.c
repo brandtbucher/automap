@@ -670,8 +670,21 @@ new(PyTypeObject* cls, PyObject* keys)
         }
         Py_INCREF(intcache);
         Py_SETREF(keys, intcache);
+        goto construct;
     }
 non_intcache:;
+    PyObject *new_keys;
+    if (PyType_IsSubtype(cls, &AutoMapType) && !PyTuple_CheckExact(keys)) {
+        new_keys = PySequence_List(keys);
+    }
+    else {
+        new_keys = PySequence_Tuple(keys);
+    }
+    Py_SETREF(keys, new_keys);
+    if (!keys) {
+        return NULL;
+    }
+construct:;
     AutoMapObject* self = (AutoMapObject*)cls->tp_alloc(cls, 0);
     if (!self) {
         Py_DECREF(keys);
@@ -1004,8 +1017,6 @@ AutoMap_richcompare(AutoMapObject* self, PyObject* other, int op)
     if (self->keys == intcache && keys == intcache) {
         goto len_compare;
     }
-    assert(PyList_CheckExact(self->keys) || PyTuple_CheckExact(self->keys));
-    assert(PyList_CheckExact(keys) || PyTuple_CheckExact(keys));
     if (Py_TYPE(self->keys) == Py_TYPE(keys) && (self->keys != intcache || keys != intcache)) {
         return PyObject_RichCompare(self->keys, keys, op);
     }
