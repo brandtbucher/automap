@@ -1,7 +1,10 @@
-// TODO: Tests, group similar functionality, make copies faster.
+// TODO: More tests.
+// TODO: Group similar functionality.
+// TODO: Make copies faster.
 // TODO: Check refcounts when calling into hash and comparison functions.
 // TODO: Check allocation and cleanup.
 // TODO: Optimize lookups for tableless maps.
+// More comments.
 
 
 /*******************************************************************************
@@ -87,7 +90,7 @@ hot in L1 cache (and can even be predicted and speculatively executed). The
 indices and hashes are actually interleaved for better cache locality as well.
 
 We repeat this scan 15 times. We don't even have to worry about wrapping around
-the edge of the table during the this part, since we've left enough free space
+the edge of the table during this part, since we've left enough free space
 (equal to the number of scans) to safely run over the end. It's wasteful for a
 small example like this, but for more realistic sizes it's just about perfect.
 
@@ -101,16 +104,24 @@ similar to what Python's sets do, so we still handle some nasty collisions and
 missing keys well.
 
 There are a couple of other tricks that we use, like globally caching integer
-objects from value lookups and leaning heavily on some of the functionality that
-our list of keys gives us for free, but the hardware-friendly hash table design
-is what really gives us our awesome performance.
+objects from value lookups and skipping the table entirely for identity
+mappings, but the hardware-friendly hash table design is what really gives us
+our awesome performance.
 
 *******************************************************************************/
 
+# define PY_SSIZE_T_CLEAN
 # include "Python.h"
 
 
-/* Experimentation shows that these values work well: */
+// Py_UNREACHABLE() isn't available in Python 3.6:
+
+# ifndef Py_UNREACHABLE
+# define Py_UNREACHABLE() Py_FatalError("https://xkcd.com/2200")
+# endif
+
+
+// Experimentation shows that these values work well:
 
 # define LOAD 0.9
 # define SCAN 16
@@ -182,27 +193,55 @@ AutoMapIterator_iter(AutoMapIteratorObject* self)
 static PyObject*
 AutoMapIterator_iternext(AutoMapIteratorObject* self)
 {
-    if (self->index == self->map->len) {
-        return NULL;
+    Py_ssize_t index;
+    switch (self->kind) {
+        case ITEMS:
+        case KEYS:
+        case VALUES: {
+            index = self->index++;
+            if (self->map->len <= index) {
+                return NULL;
+            }
+            break;
+        }
+        case REVERSED_ITEMS:
+        case REVERSED_KEYS:
+        case REVERSED_VALUES: {
+            index = self->map->len - 1 - self->index++;
+            if (index < 0 || self->map->len <= index) {
+                return NULL;
+            }
+            break;
+        }
+        default: {
+            Py_UNREACHABLE();
+        }
     }
-    PyObject *yield;
-    if (self->kind == ITEMS) {
-        yield = PyTuple_Pack(
-            2,
-            PySequence_Fast_GET_ITEM(self->map->keys, self->index),
-            PyList_GET_ITEM(intcache, self->index)
-        );
+    switch (self->kind) {
+        case ITEMS:
+        case REVERSED_ITEMS: {
+            return PyTuple_Pack(
+                2,
+                PySequence_Fast_GET_ITEM(self->map->keys, index),
+                PyList_GET_ITEM(intcache, index)
+            );
+        }
+        case KEYS:
+        case REVERSED_KEYS: {
+            PyObject *yield = PySequence_Fast_GET_ITEM(self->map->keys, index);
+            Py_INCREF(yield);
+            return yield;
+        }
+        case VALUES:
+        case REVERSED_VALUES: {
+            PyObject *yield = PyList_GET_ITEM(intcache, index);
+            Py_INCREF(yield);
+            return yield;
+        }
+        default: {
+            Py_UNREACHABLE();
+        }
     }
-    else if (self->kind == KEYS) {
-        yield = PySequence_Fast_GET_ITEM(self->map->keys, self->index);
-        Py_INCREF(yield);
-    }
-    else {
-        yield = PyList_GET_ITEM(intcache, self->index);
-        Py_INCREF(yield);
-    }
-    self->index++;
-    return yield;
 }
 
 
@@ -365,11 +404,10 @@ AutoMapView_methods___length_hint__(AutoMapViewObject* self)
 static PyObject*
 AutoMapView_methods_isdisjoint(AutoMapViewObject* self, PyObject* other)
 {
-    PyObject* intersection = PyNumber_And((PyObject*)self, other);
-    PyObject* result = PyObject_IsTrue(intersection) ? Py_True : Py_False;
+    PyObject* intersection = AutoMapView_and((PyObject*)self, other);
+    int result = PyObject_IsTrue(intersection);
     Py_DECREF(intersection);
-    Py_INCREF(result);
-    return result;
+    return PyBool_FromLong(result);
 }
 
 
@@ -429,35 +467,33 @@ view(AutoMapObject* map, int kind)
 static Py_ssize_t
 lookup_hash(AutoMapObject* self, PyObject* key, Py_hash_t hash)
 {
-    PyObject *guess;
-    int result;
     entry* entries = self->entries;
     Py_ssize_t mask = self->size - 1;
     Py_hash_t mixin = Py_ABS(hash);
-    Py_hash_t h;
-    Py_ssize_t stop;
     PyObject **items = PySequence_Fast_ITEMS(self->keys);
     for (Py_ssize_t index = hash & mask;; index = (5 * (index - SCAN) + (mixin >>= 1) + 1) & mask) {
-        for (stop = index + SCAN; index < stop; index++) {
-            h = entries[index].hash;
-            if (h == hash) {
-                guess = items[entries[index].index];
-                if (guess == key) {
-                    /* Hit. */
-                    return index;
-                }
-                result = PyObject_RichCompareBool(guess, key, Py_EQ);
-                if (result < 0) {
-                    /* Error. */
-                    return -1;
-                }
-                if (result) {
-                    /* Hit. */
-                    return index;
-                }
+        for (Py_ssize_t stop = index + SCAN; index < stop; index++) {
+            Py_hash_t h = entries[index].hash;
+            if (h == -1) {
+                // Miss.
+                return index;
             }
-            else if (h == -1) {
-                /* Miss. */
+            if (h != hash) {
+                // Collision.
+                continue;
+            }
+            PyObject *guess = items[entries[index].index];
+            if (guess == key) {
+                // Hit.
+                return index;
+            }
+            int result = PyObject_RichCompareBool(guess, key, Py_EQ);
+            if (result < 0) {
+                // Error.
+                return -1;
+            }
+            if (result) {
+                // Hit.
                 return index;
             }
         }
@@ -890,17 +926,7 @@ AutoMap_methods___getnewargs__(AutoMapObject* self)
 static PyObject*
 AutoMap_methods___reversed__(AutoMapObject* self)
 {
-    // TODO: use iterator class
-    if (self->keys == intcache) {
-        PyObject *keys = PyList_GetSlice(self->keys, 0, self->len);
-        if (!keys) {
-            return NULL;
-        }
-        PyObject *reversed = PyObject_CallMethod(keys, "__reversed__", NULL);
-        Py_DECREF(keys);
-        return reversed;
-    }
-    return PyObject_CallMethod(self->keys, "__reversed__", NULL);
+    return viewiter(self, REVERSED_KEYS);
 }
 
 
@@ -1047,8 +1073,7 @@ len_compare:
         case Py_NE:
             return PyBool_FromLong(self->len != len);
         default:
-            // Py_UNREACHABLE() isn't available in Python 3.6...
-            abort();
+            Py_UNREACHABLE();
     }
 }
 
