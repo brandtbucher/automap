@@ -26,6 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
+      - uses: docker/setup-qemu-action@v1
+        if: runner.os == 'Linux'
+        with:
+          platforms: all
       - uses: joerick/cibuildwheel@v1.9.0
         with:
           output-dir: dist
