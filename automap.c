@@ -209,7 +209,8 @@ fami_iternext(FAMIObject* self)
         case REVERSED_KEYS:
         case REVERSED_VALUES: {
             index = PySequence_Fast_GET_SIZE(self->map->keys) - ++self->index;
-            if (index < 0 || PySequence_Fast_GET_SIZE(self->map->keys) <= index) {
+            if (index < 0 || PySequence_Fast_GET_SIZE(self->map->keys) <= index) 
+            {
                 return NULL;
             }
             break;
@@ -432,13 +433,14 @@ lookup_hash(FAMObject* self, PyObject* key, Py_hash_t hash)
     Py_ssize_t index = hash & mask;
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
-            Py_hash_t h = table[++index].hash;
+            Py_hash_t h = table[index].hash;
             if (h == -1) {
                 // Miss.
                 return index;
             } 
             if (h != hash) {
                 // Collision.
+                index++;
                 continue;
             }
             PyObject *guess = items[table[index].index];
@@ -455,6 +457,7 @@ lookup_hash(FAMObject* self, PyObject* key, Py_hash_t hash)
                 // Hit.
                 return index;
             }
+            index++;
         }
         index = (5 * (index - SCAN) + (mixin >>= 1) + 1) & mask;
     }
