@@ -1,15 +1,13 @@
-from setuptools import Extension, setup
-
+import setuptools
 
 with open("README.md") as file:
     LONG_DESCRIPTION = file.read()
 
-
-setup(
+setuptools.setup(
     author="Brandt Bucher",
     author_email="brandtbucher@gmail.com",
     description="High-performance autoincremented integer-valued mappings.",
-    ext_modules=[Extension("automap", ["automap.c"])],
+    ext_modules=[setuptools.Extension("automap", ["automap.c"])],
     license="MIT",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
