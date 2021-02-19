@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
-      - uses: joerick/cibuildwheel@v1
+      - uses: joerick/cibuildwheel@v1.9.0
         with:
           output-dir: dist
         env:
@@ -48,7 +48,7 @@ jobs:
         with:
           name: dist
           path: dist
-      - uses: pypa/gh-action-pypi-publish@v1
+      - uses: pypa/gh-action-pypi-publish@v1.4.2
         with:
           password: ${{ secrets.PYPI_TOKEN }}
           skip_existing: true
