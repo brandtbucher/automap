@@ -10,6 +10,15 @@ import invoke
 
 
 @invoke.task
+def install(context):
+    # type: (invoke.Context) -> None
+    context.run(f"{sys.executable} -m pip install --upgrade pip", echo=True)
+    context.run(
+        f"{sys.executable} -m pip install --upgrade -r requirements.txt", echo=True
+    )
+
+
+@invoke.task(install)
 def clean(context):
     # type: (invoke.Context) -> None
     context.run(f"{sys.executable} setup.py develop --uninstall", echo=True)
@@ -21,10 +30,6 @@ def clean(context):
 @invoke.task(clean)
 def build(context):
     # type: (invoke.Context) -> None
-    context.run(f"{sys.executable} -m pip install --upgrade pip", echo=True)
-    context.run(
-        f"{sys.executable} -m pip install --upgrade -r requirements.txt", echo=True
-    )
     context.run(f"{sys.executable} setup.py develop", echo=True)
 
 
@@ -70,7 +75,7 @@ def performance(context):
     def geometric_mean(xs):
         return functools.reduce(operator.mul, xs) ** (1 / len(xs))
 
-    with multiprocessing.Pool() as pool:
+    with multiprocessing.get_context("spawn").Pool() as pool:
         for kind in (str, int):
             total_create = []
             total_access = []
