@@ -11,14 +11,16 @@ automap
 
 </div>
 
-`automap` is a Python package containing high-performance autoincremented integer-valued mappings.
+`automap` is a Python package containing high-performance autoincremented
+integer-valued mappings.
 
 To install, just run `pip install automap`.
 
 Examples
 --------
 
-`automap` objects are sort of like "inverse sequences". They come in two variants:
+`automap` objects are sort of like "inverse sequences". They come in two
+variants:
 
 ### FrozenAutoMap
 
@@ -26,7 +28,8 @@ Examples
 >>> from automap import FrozenAutoMap
 ```
 
-`FrozenAutoMap` objects are immutable. They can be constructed from any iterable of hashable, unique keys.
+`FrozenAutoMap` objects are immutable. They can be constructed from any iterable
+of hashable, unique keys.
 
 
 ```py
@@ -39,7 +42,8 @@ ValueError: 'A'
 automap.FrozenAutoMap(['A', 'B', 'C'])
 ```
 
-The values are integers, incrementing according to the order of the original keys:
+The values are integers, incrementing according to the order of the original
+keys:
 
 ```py
 >>> a["A"]
@@ -115,8 +119,8 @@ Performance
 -----------
 
 Tests show string-keyed `AutoMap` objects being created 50% faster and accessed
-5% faster than the equivalent `dict` construction. They tend to take up the same
-amount of memory, on average. You can run `invoke performance` from this
+5% faster than the equivalent `dict` construction, on average. They also tend to
+take up slightly less memory. You can run `invoke performance` from this
 repository to see the comparison on your machine.
 
 More details on the design can be found in `automap.c`.
