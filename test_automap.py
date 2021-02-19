@@ -1,25 +1,23 @@
-from datetime import date, datetime
-from pickle import dumps, loads
-from timeit import Timer
+import pickle
 import typing
 
-from hypothesis import assume, given, infer
-from pytest import raises
+import hypothesis
+import pytest
 
-from automap import AutoMap, FrozenAutoMap
+import automap
 
 
 Keys = typing.Set[typing.Hashable]
 
 
-@given(keys=infer)
+@hypothesis.given(keys=hypothesis.infer)
 def test_auto_map___len__(keys: Keys) -> None:
-    assert len(AutoMap(keys)) == len(keys)
+    assert len(automap.AutoMap(keys)) == len(keys)
 
 
-@given(keys=infer, others=infer)
+@hypothesis.given(keys=hypothesis.infer, others=hypothesis.infer)
 def test_auto_map___contains__(keys: Keys, others: Keys) -> None:
-    a = AutoMap(keys)
+    a = automap.AutoMap(keys)
     for key in keys:
         assert key in a
     others -= keys
@@ -27,56 +25,56 @@ def test_auto_map___contains__(keys: Keys, others: Keys) -> None:
         assert key not in a
 
 
-@given(keys=infer, others=infer)
+@hypothesis.given(keys=hypothesis.infer, others=hypothesis.infer)
 def test_auto_map___getitem__(keys: Keys, others: Keys) -> None:
-    a = AutoMap(keys)
+    a = automap.AutoMap(keys)
     for index, key in enumerate(keys):
         assert a[key] == index
     others -= keys
     for key in others:
-        with raises(KeyError):
+        with pytest.raises(KeyError):
             a[key]
 
 
-@given(keys=infer)
+@hypothesis.given(keys=hypothesis.infer)
 def test_auto_map___hash__(keys: Keys) -> None:
-    assert hash(FrozenAutoMap(keys)) == hash(FrozenAutoMap(keys))
+    assert hash(automap.FrozenAutoMap(keys)) == hash(automap.FrozenAutoMap(keys))
 
 
-@given(keys=infer)
+@hypothesis.given(keys=hypothesis.infer)
 def test_auto_map___iter__(keys: Keys) -> None:
-    assert [*AutoMap(keys)] == [*keys]
+    assert [*automap.AutoMap(keys)] == [*keys]
 
 
-@given(keys=infer)
+@hypothesis.given(keys=hypothesis.infer)
 def test_auto_map___reversed__(keys: Keys) -> None:
-    assert [*reversed(AutoMap(keys))] == [*reversed([*keys])]
+    assert [*reversed(automap.AutoMap(keys))] == [*reversed([*keys])]
 
 
-@given(keys=infer)
+@hypothesis.given(keys=hypothesis.infer)
 def test_auto_map_add(keys: Keys) -> None:
-    a = AutoMap()
+    a = automap.AutoMap()
     for l, key in enumerate(keys):
         assert a.add(key) is None
         assert len(a) == l + 1
         assert a[key] == l
 
 
-@given(keys=infer)
+@hypothesis.given(keys=hypothesis.infer)
 def test_pickle(keys: Keys) -> None:
     try:
-        assume(loads(dumps(keys)) == keys)
-    except TypeError:
-        assume(False)
-    a = AutoMap(keys)
-    assert loads(dumps(a)) == a
+        hypothesis.assume(pickle.loads(pickle.dumps(keys)) == keys)
+    except (TypeError, pickle.PicklingError):
+        hypothesis.assume(False)
+    a = automap.AutoMap(keys)
+    assert pickle.loads(pickle.dumps(a)) == a
 
 
-@given(keys=infer)
+@hypothesis.given(keys=hypothesis.infer)
 def test_issue_3(keys: Keys) -> None:
-    assume(keys)
+    hypothesis.assume(keys)
     key = keys.pop()
-    a = AutoMap(keys)
+    a = automap.AutoMap(keys)
     a |= (key,)
-    with raises(ValueError):
+    with pytest.raises(ValueError):
         a |= (key,)
