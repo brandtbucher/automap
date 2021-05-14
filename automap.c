@@ -3,7 +3,6 @@
 // TODO: Make copies faster.
 // TODO: Check refcounts when calling into hash and comparison functions.
 // TODO: Check allocation and cleanup.
-// TODO: Richcompare is only ==, !=, figure out view containment, etc.
 // TODO: Subinterpreter support.
 // TODO: GC support.
 // More comments.
@@ -716,7 +715,7 @@ fam_or(PyObject* left, PyObject* right)
     if (!updated) {
         return NULL;
     }
-    if (extend(updated, right)) {
+    if (extend(updated, ((FAMObject *)right)->keys)) {
         Py_DECREF(updated);
         return NULL;
     }
@@ -886,48 +885,10 @@ fam_repr(FAMObject* self)
 static PyObject*
 fam_richcompare(FAMObject* self, PyObject* other, int op)
 {
-    // TODO
     if (!PyObject_TypeCheck(other, &FAMType)) {
         Py_RETURN_NOTIMPLEMENTED;
     }
-    PyObject *other_keys = ((FAMObject*)other)->keys;
-    if ((PyObject*)self == other || self->keys == other_keys) {
-        return PyBool_FromLong(op == Py_EQ || op == Py_GE || op == Py_LE);
-    }
-    if (Py_TYPE(self->keys) == Py_TYPE(other_keys)) {
-        return PyObject_RichCompare(self->keys, other_keys, op);
-    }
-    Py_ssize_t len = PyList_GET_SIZE(self->keys);
-    Py_ssize_t other_len = PyList_GET_SIZE(other_keys);
-    Py_ssize_t common = Py_MIN(len, other_len);
-    for (Py_ssize_t i = 0; i < common; i++) {
-        int result = PyObject_RichCompareBool(
-                         PyList_GET_ITEM(self->keys, i),
-                         PyList_GET_ITEM(other_keys, i),
-                         op);
-        if (result < 0) {
-            return NULL;
-        }
-        if (!result) {
-            Py_RETURN_FALSE;
-        }
-    }
-    switch (op) {
-        case Py_EQ:
-            return PyBool_FromLong(len == other_len);
-        case Py_GE:
-            return PyBool_FromLong(len >= other_len);
-        case Py_GT:
-            return PyBool_FromLong(len > other_len);
-        case Py_LE:
-            return PyBool_FromLong(len <= other_len);
-        case Py_LT:
-            return PyBool_FromLong(len < other_len);
-        case Py_NE:
-            return PyBool_FromLong(len != other_len);
-        default:
-            Py_UNREACHABLE();
-    }
+    return PyObject_RichCompare(self->keys, ((FAMObject*)other)->keys, op);
 }
 
 
