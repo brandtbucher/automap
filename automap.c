@@ -128,10 +128,6 @@ our awesome performance.
 # define LOAD 0.9
 # define SCAN 16
 
-# define KEYS            'K'
-# define VALUES          'V'
-# define ITEMS           'I'
-
 
 typedef struct {
     Py_ssize_t index;
@@ -147,18 +143,25 @@ typedef struct {
 } FAMObject;
 
 
+typedef enum {
+    ITEMS,
+    KEYS,
+    VALUES,
+} Kind;
+
+
 typedef struct {
     PyObject_VAR_HEAD
-    char kind;
-    FAMObject* map;
+    FAMObject *map;
+    Kind kind;
 } FAMVObject;
 
 
 typedef struct {
     PyObject_VAR_HEAD
-    char kind;
+    FAMObject *map;
+    Kind kind;
     int reversed;
-    FAMObject* map;
     Py_ssize_t index;
 } FAMIObject;
 
@@ -169,12 +172,12 @@ static PyTypeObject FAMVType;
 static PyTypeObject FAMType;
 
 
-static PyObject* intcache = NULL;
+static PyObject *intcache = NULL;
 static Py_ssize_t count = 0;
 
 
 static void
-fami_dealloc(FAMIObject* self)
+fami_dealloc(FAMIObject *self)
 {
     Py_DECREF(self->map);
     Py_TYPE(self)->tp_free((PyObject*)self);
@@ -182,7 +185,7 @@ fami_dealloc(FAMIObject* self)
 
 
 static FAMIObject*
-fami_iter(FAMIObject* self)
+fami_iter(FAMIObject *self)
 {
     Py_INCREF(self);
     return self;
@@ -190,11 +193,11 @@ fami_iter(FAMIObject* self)
 
 
 static PyObject*
-fami_iternext(FAMIObject* self)
+fami_iternext(FAMIObject *self)
 {
     Py_ssize_t index;
     if (self->reversed) {
-        index = PySequence_Fast_GET_SIZE(self->map->keys) - ++self->index;
+        index = PyList_GET_SIZE(self->map->keys) - ++self->index;
         if (index < 0) {
             return NULL;
         }
@@ -202,19 +205,19 @@ fami_iternext(FAMIObject* self)
     else {
         index = self->index++;
     }
-    if (PySequence_Fast_GET_SIZE(self->map->keys) <= index) {
+    if (PyList_GET_SIZE(self->map->keys) <= index) {
         return NULL;
     }
     switch (self->kind) {
         case ITEMS: {
             return PyTuple_Pack(
                 2,
-                PySequence_Fast_GET_ITEM(self->map->keys, index),
+                PyList_GET_ITEM(self->map->keys, index),
                 PyList_GET_ITEM(intcache, index)
             );
         }
         case KEYS: {
-            PyObject *yield = PySequence_Fast_GET_ITEM(self->map->keys, index);
+            PyObject *yield = PyList_GET_ITEM(self->map->keys, index);
             Py_INCREF(yield);
             return yield;
         }
@@ -233,11 +236,11 @@ fami_iternext(FAMIObject* self)
 static PyObject*
 fami_methods___length_hint__(FAMIObject* self)
 {
-    return PyLong_FromSsize_t(Py_MAX(0, PySequence_Fast_GET_SIZE(self->map->keys) - self->index));
+    return PyLong_FromSsize_t(Py_MAX(0, PyList_GET_SIZE(self->map->keys) - self->index));
 }
 
 
-static PyObject *iter(FAMObject*, char, int);
+static PyObject *iter(FAMObject*, Kind, int);
 
 
 static PyObject*
@@ -266,19 +269,20 @@ static PyTypeObject FAMIType = {
 
 
 static PyObject*
-iter(FAMObject* map, char kind, int reversed)
+iter(FAMObject* map, Kind kind, int reversed)
 {
     FAMIObject* self = PyObject_New(FAMIObject, &FAMIType);
     if (!self) {
         return NULL;
     }
+    Py_INCREF(map);
+    self->map = map;
     self->kind = kind;
     self->reversed = reversed;
-    self->map = map;
     self->index = 0;
-    Py_INCREF(map);
     return (PyObject*)self;
 }
+
 
 
 # define SET_OP(name, op)                                 \
@@ -361,7 +365,14 @@ famv_iter(FAMVObject* self)
 static PyObject*
 famv_methods___length_hint__(FAMVObject* self)
 {
-    return PyLong_FromSsize_t(PySequence_Fast_GET_SIZE(self->map->keys));
+    return PyLong_FromSsize_t(PyList_GET_SIZE(self->map->keys));
+}
+
+
+static PyObject*
+famv_methods___reversed__(FAMVObject* self)
+{
+    return iter(self->map, self->kind, 1);
 }
 
 
@@ -380,6 +391,7 @@ famv_methods_isdisjoint(FAMVObject* self, PyObject* other)
 
 static PyMethodDef famv_methods[] = {
     {"__length_hint__", (PyCFunction) famv_methods___length_hint__, METH_NOARGS, NULL},
+    {"__reversed__", (PyCFunction) famv_methods___reversed__, METH_NOARGS, NULL},
     {"isdisjoint", (PyCFunction) famv_methods_isdisjoint, METH_O, NULL},
     {NULL},
 };
@@ -558,7 +570,7 @@ grow(FAMObject* self, Py_ssize_t needed)
     if (oldsize) {
         for (index = 0; index < oldsize + SCAN - 1; index++) {
             if ((oldentries[index].hash != -1) &&
-                insert(self, PySequence_Fast_GET_ITEM(self->keys,
+                insert(self, PyList_GET_ITEM(self->keys,
                                                       oldentries[index].index),
                        oldentries[index].index, oldentries[index].hash))
             {
@@ -577,20 +589,11 @@ grow(FAMObject* self, Py_ssize_t needed)
 static FAMObject*
 new(PyTypeObject* cls, PyObject* keys)
 {
-    if (!keys) {
-        if (fill_intcache(0)) {
-            return NULL;
-        }
-        keys = PyList_New(0);
-        if (!keys) {
-            return NULL;
-        }
-    }
-    if (PyType_IsSubtype(cls, &AMType) && !PyTuple_CheckExact(keys)) {
+    if (keys) {
         keys = PySequence_List(keys);
     }
     else {
-        keys = PySequence_Tuple(keys);
+        keys = PyList_New(0);
     }
     if (!keys) {
         return NULL;
@@ -601,14 +604,14 @@ new(PyTypeObject* cls, PyObject* keys)
         return NULL;
     }
     self->keys = keys;
-    count += PySequence_Fast_GET_SIZE(keys);
-    if (grow(self, PySequence_Fast_GET_SIZE(keys))) {
+    count += PyList_GET_SIZE(keys);
+    if (grow(self, PyList_GET_SIZE(keys))) {
         Py_DECREF(self);
         return NULL;
     }
-    for (Py_ssize_t index = 0; index < PySequence_Fast_GET_SIZE(keys); index++)
+    for (Py_ssize_t index = 0; index < PyList_GET_SIZE(keys); index++)
     {
-        if (insert(self, PySequence_Fast_GET_ITEM(self->keys, index), index, -1))
+        if (insert(self, PyList_GET_ITEM(self->keys, index), index, -1))
         {
             Py_DECREF(self);
             return NULL;
@@ -625,9 +628,9 @@ extend(FAMObject* self, PyObject* keys)
     if (!keys) {
         return -1;
     }
-    Py_ssize_t extendsize = PySequence_Fast_GET_SIZE(keys);
+    Py_ssize_t extendsize = PyList_GET_SIZE(keys);
     count += extendsize;
-    if (grow(self, PySequence_Fast_GET_SIZE(self->keys) + extendsize)) {
+    if (grow(self, PyList_GET_SIZE(self->keys) + extendsize)) {
         Py_DECREF(keys);
         return -1;
     }
@@ -649,10 +652,10 @@ static int
 append(FAMObject* self, PyObject* key)
 {
     count++;
-    if (grow(self, PySequence_Fast_GET_SIZE(self->keys) + 1)) {
+    if (grow(self, PyList_GET_SIZE(self->keys) + 1)) {
         return -1;
     }
-    if (insert(self, key, PySequence_Fast_GET_SIZE(self->keys), -1) ||
+    if (insert(self, key, PyList_GET_SIZE(self->keys), -1) ||
         PyList_Append(self->keys, key))
     {
         return -1;
@@ -664,7 +667,7 @@ append(FAMObject* self, PyObject* key)
 static Py_ssize_t
 fam_length(FAMObject* self)
 {
-    return PySequence_Fast_GET_SIZE(self->keys);
+    return PyList_GET_SIZE(self->keys);
 }
 
 
@@ -749,7 +752,7 @@ fam_dealloc(FAMObject* self)
 {
     PyMem_Del(self->table);
     Py_XDECREF(self->keys);
-    count -= PySequence_Fast_GET_SIZE(self->keys);
+    count -= PyList_GET_SIZE(self->keys);
     if (count < PyList_GET_SIZE(intcache)) {
         // del intcache[count:]
         PyList_SetSlice(intcache, count, PyList_GET_SIZE(intcache), NULL);
@@ -761,7 +764,14 @@ fam_dealloc(FAMObject* self)
 static Py_hash_t
 fam_hash(FAMObject* self)
 {
-    return PyObject_Hash(self->keys);
+    Py_hash_t hash = 0;
+    for (Py_ssize_t i = 0; i < self->tablesize; i++) {
+        hash = hash * 3 + self->table[i].hash;
+    }
+    if (hash == -1) {
+        return 0;
+    }
+    return hash;
 }
 
 
@@ -887,13 +897,13 @@ fam_richcompare(FAMObject* self, PyObject* other, int op)
     if (Py_TYPE(self->keys) == Py_TYPE(other_keys)) {
         return PyObject_RichCompare(self->keys, other_keys, op);
     }
-    Py_ssize_t len = PySequence_Fast_GET_SIZE(self->keys);
-    Py_ssize_t other_len = PySequence_Fast_GET_SIZE(other_keys);
+    Py_ssize_t len = PyList_GET_SIZE(self->keys);
+    Py_ssize_t other_len = PyList_GET_SIZE(other_keys);
     Py_ssize_t common = Py_MIN(len, other_len);
     for (Py_ssize_t i = 0; i < common; i++) {
         int result = PyObject_RichCompareBool(
-                         PySequence_Fast_GET_ITEM(self->keys, i),
-                         PySequence_Fast_GET_ITEM(other_keys, i),
+                         PyList_GET_ITEM(self->keys, i),
+                         PyList_GET_ITEM(other_keys, i),
                          op);
         if (result < 0) {
             return NULL;
