@@ -131,9 +131,6 @@ our awesome performance.
 # define KEYS            'K'
 # define VALUES          'V'
 # define ITEMS           'I'
-# define REVERSED_KEYS   'k'
-# define REVERSED_VALUES 'v'
-# define REVERSED_ITEMS  'i'
 
 
 typedef struct {
@@ -160,6 +157,7 @@ typedef struct {
 typedef struct {
     PyObject_VAR_HEAD
     char kind;
+    int reversed;
     FAMObject* map;
     Py_ssize_t index;
 } FAMIObject;
@@ -195,47 +193,32 @@ static PyObject*
 fami_iternext(FAMIObject* self)
 {
     Py_ssize_t index;
-    switch (self->kind) {
-        case ITEMS:
-        case KEYS:
-        case VALUES: {
-            index = self->index++;
-            if (PySequence_Fast_GET_SIZE(self->map->keys) <= index) {
-                return NULL;
-            }
-            break;
-        }
-        case REVERSED_ITEMS:
-        case REVERSED_KEYS:
-        case REVERSED_VALUES: {
-            index = PySequence_Fast_GET_SIZE(self->map->keys) - ++self->index;
-            if (index < 0 || PySequence_Fast_GET_SIZE(self->map->keys) <= index) 
-            {
-                return NULL;
-            }
-            break;
-        }
-        default: {
-            Py_UNREACHABLE();
+    if (self->reversed) {
+        index = PySequence_Fast_GET_SIZE(self->map->keys) - ++self->index;
+        if (index < 0) {
+            return NULL;
         }
     }
+    else {
+        index = self->index++;
+    }
+    if (PySequence_Fast_GET_SIZE(self->map->keys) <= index) {
+        return NULL;
+    }
     switch (self->kind) {
-        case ITEMS:
-        case REVERSED_ITEMS: {
+        case ITEMS: {
             return PyTuple_Pack(
                 2,
                 PySequence_Fast_GET_ITEM(self->map->keys, index),
                 PyList_GET_ITEM(intcache, index)
             );
         }
-        case KEYS:
-        case REVERSED_KEYS: {
+        case KEYS: {
             PyObject *yield = PySequence_Fast_GET_ITEM(self->map->keys, index);
             Py_INCREF(yield);
             return yield;
         }
-        case VALUES:
-        case REVERSED_VALUES: {
+        case VALUES: {
             PyObject *yield = PyList_GET_ITEM(intcache, index);
             Py_INCREF(yield);
             return yield;
@@ -254,8 +237,19 @@ fami_methods___length_hint__(FAMIObject* self)
 }
 
 
+static PyObject *iter(FAMObject*, char, int);
+
+
+static PyObject*
+fami_methods___reversed__(FAMIObject* self)
+{
+    return iter(self->map, self->kind, !self->reversed);
+}
+
+
 static PyMethodDef fami_methods[] = {
     {"__length_hint__", (PyCFunction) fami_methods___length_hint__, METH_NOARGS, NULL},
+    {"__reversed__", (PyCFunction) fami_methods___reversed__, METH_NOARGS, NULL},
     {NULL},
 };
 
@@ -272,12 +266,14 @@ static PyTypeObject FAMIType = {
 
 
 static PyObject*
-iter(FAMObject* map, int kind) {
+iter(FAMObject* map, char kind, int reversed)
+{
     FAMIObject* self = PyObject_New(FAMIObject, &FAMIType);
     if (!self) {
         return NULL;
     }
     self->kind = kind;
+    self->reversed = reversed;
     self->map = map;
     self->index = 0;
     Py_INCREF(map);
@@ -322,11 +318,23 @@ static PyNumberMethods famv_as_number = {
 };
 
 
+static int fam_contains(FAMObject*, PyObject*);
+static PyObject *famv_iter(FAMVObject*);
+
+
 static int
 famv_contains(FAMVObject* self, PyObject* other)
 {
-    // TODO: View type
-    return PySequence_Contains((PyObject*)self->map, other);
+    if (self->kind == KEYS) {
+        return fam_contains(self->map, other);
+    }
+    PyObject *iterator = famv_iter(self);
+    if (!iterator) {
+        return -1;
+    }
+    int result = PySequence_Contains(iterator, other);
+    Py_DECREF(other);
+    return result;
 }
 
 
@@ -346,7 +354,7 @@ famv_dealloc(FAMVObject* self)
 static PyObject*
 famv_iter(FAMVObject* self)
 {
-    return iter(self->map, self->kind);
+    return iter(self->map, self->kind, 0);
 }
 
 
@@ -437,7 +445,7 @@ lookup_hash(FAMObject* self, PyObject* key, Py_hash_t hash)
             if (h == -1) {
                 // Miss.
                 return index;
-            } 
+            }
             if (h != hash) {
                 // Collision.
                 index++;
@@ -600,7 +608,7 @@ new(PyTypeObject* cls, PyObject* keys)
     }
     for (Py_ssize_t index = 0; index < PySequence_Fast_GET_SIZE(keys); index++)
     {
-        if (insert(self, PySequence_Fast_GET_ITEM(self->keys, index), index, -1)) 
+        if (insert(self, PySequence_Fast_GET_ITEM(self->keys, index), index, -1))
         {
             Py_DECREF(self);
             return NULL;
@@ -625,7 +633,7 @@ extend(FAMObject* self, PyObject* keys)
     }
     PyObject **items = PySequence_Fast_ITEMS(keys);
     for (Py_ssize_t index = 0; index < extendsize; index++) {
-        if (insert(self, items[index], PySequence_Fast_GET_SIZE(self->keys), -1) ||
+        if (insert(self, items[index], PyList_GET_SIZE(self->keys), -1) ||
             PyList_Append(self->keys, items[index]))
         {
             Py_DECREF(keys);
@@ -654,7 +662,7 @@ append(FAMObject* self, PyObject* key)
 
 
 static Py_ssize_t
-am_length(FAMObject* self)
+fam_length(FAMObject* self)
 {
     return PySequence_Fast_GET_SIZE(self->keys);
 }
@@ -681,20 +689,20 @@ get(FAMObject* self, PyObject* key, PyObject* missing) {
 
 
 static PyObject*
-am_subscript(FAMObject* self, PyObject* key)
+fam_subscript(FAMObject* self, PyObject* key)
 {
     return get(self, key, NULL);
 }
 
 
 static PyMappingMethods fam_as_mapping = {
-    .mp_length = (lenfunc) am_length,
-    .mp_subscript = (binaryfunc) am_subscript,
+    .mp_length = (lenfunc) fam_length,
+    .mp_subscript = (binaryfunc) fam_subscript,
 };
 
 
 static PyObject*
-am_or(PyObject* left, PyObject* right)
+fam_or(PyObject* left, PyObject* right)
 {
     if (!PyObject_TypeCheck(left, &FAMType) ||
         !PyObject_TypeCheck(right, &FAMType)
@@ -714,12 +722,12 @@ am_or(PyObject* left, PyObject* right)
 
 
 static PyNumberMethods fam_as_number = {
-    .nb_or = (binaryfunc) am_or,
+    .nb_or = (binaryfunc) fam_or,
 };
 
 
 static int
-am_contains(FAMObject* self, PyObject* key)
+fam_contains(FAMObject* self, PyObject* key)
 {
     if (lookup(self, key) < 0) {
         if (PyErr_Occurred()) {
@@ -732,7 +740,7 @@ am_contains(FAMObject* self, PyObject* key)
 
 
 static PySequenceMethods fam_as_sequence = {
-    .sq_contains = (objobjproc) am_contains,
+    .sq_contains = (objobjproc) fam_contains,
 };
 
 
@@ -760,7 +768,7 @@ fam_hash(FAMObject* self)
 static PyObject*
 fam_iter(FAMObject* self)
 {
-    return iter(self, KEYS);
+    return iter(self, KEYS, 0);
 }
 
 
@@ -774,7 +782,7 @@ fam_methods___getnewargs__(FAMObject* self)
 static PyObject*
 fam_methods___reversed__(FAMObject* self)
 {
-    return iter(self, REVERSED_KEYS);
+    return iter(self, KEYS, 1);
 }
 
 
@@ -872,18 +880,20 @@ fam_richcompare(FAMObject* self, PyObject* other, int op)
     if (!PyObject_TypeCheck(other, &FAMType)) {
         Py_RETURN_NOTIMPLEMENTED;
     }
-    if ((PyObject*)self == other) {
+    PyObject *other_keys = ((FAMObject*)other)->keys;
+    if ((PyObject*)self == other || self->keys == other_keys) {
         return PyBool_FromLong(op == Py_EQ || op == Py_GE || op == Py_LE);
     }
-    Py_ssize_t len = PySequence_Fast_GET_SIZE(((FAMObject*)other)->keys);
-    PyObject *keys = ((FAMObject*)other)->keys;
-    if (Py_TYPE(self->keys) == Py_TYPE(keys) && (self->keys != intcache || keys != intcache)) {
-        return PyObject_RichCompare(self->keys, keys, op);
+    if (Py_TYPE(self->keys) == Py_TYPE(other_keys)) {
+        return PyObject_RichCompare(self->keys, other_keys, op);
     }
-    for (Py_ssize_t i = 0; i < Py_MIN(PySequence_Fast_GET_SIZE(self->keys), len); i++) {
+    Py_ssize_t len = PySequence_Fast_GET_SIZE(self->keys);
+    Py_ssize_t other_len = PySequence_Fast_GET_SIZE(other_keys);
+    Py_ssize_t common = Py_MIN(len, other_len);
+    for (Py_ssize_t i = 0; i < common; i++) {
         int result = PyObject_RichCompareBool(
                          PySequence_Fast_GET_ITEM(self->keys, i),
-                         PySequence_Fast_GET_ITEM(keys, i),
+                         PySequence_Fast_GET_ITEM(other_keys, i),
                          op);
         if (result < 0) {
             return NULL;
@@ -894,17 +904,17 @@ fam_richcompare(FAMObject* self, PyObject* other, int op)
     }
     switch (op) {
         case Py_EQ:
-            return PyBool_FromLong(PySequence_Fast_GET_SIZE(self->keys) == len);
+            return PyBool_FromLong(len == other_len);
         case Py_GE:
-            return PyBool_FromLong(PySequence_Fast_GET_SIZE(self->keys) >= len);
+            return PyBool_FromLong(len >= other_len);
         case Py_GT:
-            return PyBool_FromLong(PySequence_Fast_GET_SIZE(self->keys) > len);
+            return PyBool_FromLong(len > other_len);
         case Py_LE:
-            return PyBool_FromLong(PySequence_Fast_GET_SIZE(self->keys) <= len);
+            return PyBool_FromLong(len <= other_len);
         case Py_LT:
-            return PyBool_FromLong(PySequence_Fast_GET_SIZE(self->keys) < len);
+            return PyBool_FromLong(len < other_len);
         case Py_NE:
-            return PyBool_FromLong(PySequence_Fast_GET_SIZE(self->keys) != len);
+            return PyBool_FromLong(len != other_len);
         default:
             Py_UNREACHABLE();
     }
