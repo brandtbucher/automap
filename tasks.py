@@ -9,36 +9,35 @@ import timeit
 import invoke
 
 
+run = functools.partial(invoke.Context.run, echo=True, pty=True)
+
+
 @invoke.task
 def install(context):
     # type: (invoke.Context) -> None
-    context.run(f"{sys.executable} -m pip install --upgrade pip", echo=True, pty=True)
-    context.run(
-        f"{sys.executable} -m pip install --upgrade -r requirements.txt",
-        echo=True,
-        pty=True,
-    )
+    run(context, f"{sys.executable} -m pip install --upgrade pip")
+    run(context, f"{sys.executable} -m pip install --upgrade -r requirements.txt")
 
 
 @invoke.task(install)
 def clean(context):
     # type: (invoke.Context) -> None
-    context.run(f"{sys.executable} setup.py develop --uninstall", echo=True, pty=True)
+    run(context, f"{sys.executable} setup.py develop --uninstall")
     for artifact in ("*.egg-info", "*.so", "build", "dist"):
-        context.run(f"rm -rf {artifact}", echo=True, pty=True)
-    context.run(f"{sys.executable} -m black .", echo=True, pty=True)
+        run(context, f"rm -rf {artifact}")
+    run(context, f"{sys.executable} -m black .")
 
 
 @invoke.task(clean)
 def build(context):
     # type: (invoke.Context) -> None
-    context.run(f"{sys.executable} setup.py develop", echo=True, pty=True)
+    run(context, f"{sys.executable} setup.py develop")
 
 
 @invoke.task(build)
 def test(context):
     # type: (invoke.Context) -> None
-    context.run(f"{sys.executable} -m pytest -v", echo=True, pty=True)
+    run(context, f"{sys.executable} -m pytest -v")
 
 
 def do_work(info):
