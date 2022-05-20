@@ -26,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macOS, Ubuntu, Windows]
-        minor: [6, 7, 8, 9]
+        minor: [7, 8, 9, 10]
     runs-on: ${{ matrix.os }}-latest
     steps:
       - uses: actions/checkout@v2
@@ -35,7 +35,7 @@ jobs:
         if: matrix.os == 'Ubuntu' && github.event_name == 'release' && github.event.action == 'published'
         with:
           platforms: all
-      - uses: joerick/cibuildwheel@v1.9.0
+      - uses: pypa/cibuildwheel@v2.5.0
         with:
           output-dir: dist
         env:

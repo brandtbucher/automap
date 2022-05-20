@@ -1,4 +1,4 @@
-black==20.8b1
-hypothesis==5.41.1
-invoke==1.4.1
-pytest==6.1.2
+black==22.3.0
+hypothesis==6.46.7
+invoke==1.7.1
+pytest==7.1.2

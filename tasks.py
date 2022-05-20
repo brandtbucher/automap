@@ -55,7 +55,7 @@ def do_work(info):
         globals=namespace,
     )
     kind, power, factor = info
-    items = factor * 10 ** power
+    items = factor * 10**power
     namespace["keys"] = [kind(_) for _ in range(items)]
     random.shuffle(namespace["keys"])
     iterations = max(create_a.autorange()[0], create_d.autorange()[0])
