@@ -14,5 +14,5 @@ setuptools.setup(
     name="automap",
     python_requires=">=3.7.0",
     url="https://github.com/brandtbucher/automap",
-    version="0.5.0",
+    version="0.5.1",
 )
