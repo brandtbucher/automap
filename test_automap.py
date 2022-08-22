@@ -78,3 +78,11 @@ def test_issue_3(keys: Keys) -> None:
     a |= (key,)
     with pytest.raises(ValueError):
         a |= (key,)
+
+
+def test_non_unique_exception():
+    with pytest.raises(ValueError):
+        _ = automap.AutoMap(("a", "b", "a"))
+
+    with pytest.raises(automap.NonUniqueError):
+        _ = automap.AutoMap(("a", "b", "a"))

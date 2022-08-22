@@ -114,14 +114,6 @@ really gives us our awesome performance.
 # define PY_SSIZE_T_CLEAN
 # include "Python.h"
 
-
-// Py_UNREACHABLE() isn't available in Python 3.6:
-
-# ifndef Py_UNREACHABLE
-# define Py_UNREACHABLE() Py_FatalError("https://xkcd.com/2200")
-# endif
-
-
 // Experimentation shows that these values work well:
 
 # define LOAD 0.9
@@ -170,6 +162,7 @@ static PyTypeObject FAMIType;
 static PyTypeObject FAMVType;
 static PyTypeObject FAMType;
 
+static PyObject *NonUniqueError;
 
 static PyObject *intcache = NULL;
 static Py_ssize_t count = 0;
@@ -510,7 +503,7 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t offset, Py_hash_t hash)
         return -1;
     }
     if (self->table[index].hash != -1) {
-        PyErr_SetObject(PyExc_ValueError, key);
+        PyErr_Format(NonUniqueError, "Non-unique value found: %R", key, NULL);
         return -1;
     }
     self->table[index].index = offset;
@@ -1014,6 +1007,15 @@ static struct PyModuleDef automap_module = {
 PyObject *
 PyInit_automap(void)
 {
+    NonUniqueError = PyErr_NewExceptionWithDoc(
+            "automap.NonUniqueError",
+            "ValueError for non-unique values.",
+            PyExc_ValueError,
+            NULL);
+    if (NonUniqueError == NULL) {
+        return NULL;
+    }
+
     PyObject *automap = PyModule_Create(&automap_module);
     if (
         !automap
@@ -1023,6 +1025,7 @@ PyInit_automap(void)
         || PyType_Ready(&FAMType)
         || PyModule_AddObject(automap, "AutoMap", (PyObject *)&AMType)
         || PyModule_AddObject(automap, "FrozenAutoMap", (PyObject *)&FAMType)
+        || PyModule_AddObject(automap, "NonUniqueError", NonUniqueError)
     ) {
         Py_XDECREF(automap);
         return NULL;
