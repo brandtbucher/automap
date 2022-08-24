@@ -78,3 +78,15 @@ def test_issue_3(keys: Keys) -> None:
     a |= (key,)
     with pytest.raises(ValueError):
         a |= (key,)
+
+
+@hypothesis.given(keys=hypothesis.infer)
+def test_non_unique_exception(keys: Keys):
+    hypothesis.assume(keys)
+    duplicate = next(iter(keys))
+
+    with pytest.raises(ValueError):
+        automap.AutoMap([*keys, duplicate])
+
+    with pytest.raises(automap.NonUniqueError):
+        automap.AutoMap([*keys, duplicate])
