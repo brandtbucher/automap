@@ -503,7 +503,7 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t offset, Py_hash_t hash)
         return -1;
     }
     if (self->table[index].hash != -1) {
-        PyErr_Format(NonUniqueError, "Non-unique value found: %R", key, NULL);
+        PyErr_Format(NonUniqueError, "Non-unique value found: %R", key);
         return -1;
     }
     self->table[index].index = offset;
