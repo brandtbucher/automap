@@ -118,9 +118,9 @@ automap.AutoMap(['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'])
 Performance
 -----------
 
-Tests show string-keyed `AutoMap` objects being created 50% faster and accessed
+Tests show string-keyed `AutoMap` objects being created 70% faster and accessed
 5% faster than the equivalent `dict` construction, on average. They also tend to
-take up slightly less memory. You can run `invoke performance` from this
+take up the same amount of memory. You can run `invoke performance` from this
 repository to see the comparison on your machine.
 
 More details on the design can be found in `automap.c`.

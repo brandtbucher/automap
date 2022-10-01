@@ -44,8 +44,8 @@ def do_work(info):
     import automap
 
     namespace = {"FrozenAutoMap": automap.FrozenAutoMap}
-    create_a = timeit.Timer("FrozenAutoMap(keys)", globals=namespace)
-    create_d = timeit.Timer("{k: i for i, k in enumerate(keys)}", globals=namespace)
+    create_a = timeit.Timer("a = FrozenAutoMap(keys)", globals=namespace)
+    create_d = timeit.Timer("d = {k: i for i, k in enumerate(keys)}", globals=namespace)
     access_a = timeit.Timer(
         "for key in a: a[key]", "a = FrozenAutoMap(keys)", globals=namespace
     )
