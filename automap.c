@@ -114,6 +114,12 @@ really gives us our awesome performance.
 # define PY_SSIZE_T_CLEAN
 # include "Python.h"
 
+// PyPy doesn't define Py_UNREACHABLE():
+
+# ifndef Py_UNREACHABLE
+# define Py_UNREACHABLE() Py_FatalError("https://xkcd.com/2200")
+# endif
+
 // Experimentation shows that these values work well:
 
 # define LOAD 0.9
