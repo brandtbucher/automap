@@ -26,12 +26,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [macOS, Ubuntu, Windows]
-        minor: [7, 8, 9, 10]
+        minor: [7, 8, 9, 10, 11]
     runs-on: ${{ matrix.os }}-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
-      - uses: pypa/cibuildwheel@v2.5.0
+      - uses: pypa/cibuildwheel@v2.11.2
         with:
           output-dir: dist
         env:
