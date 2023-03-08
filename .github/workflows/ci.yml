@@ -20,38 +20,59 @@ jobs:
         with:
           name: dist
           path: dist
-  whl:
+
+  whl_lt_3_9:
     name: Build / ${{ matrix.os }} / Python 3.${{ matrix.minor }}
     strategy:
       fail-fast: false
       matrix:
         os: [macOS, Ubuntu, Windows]
-        minor: [7, 8, 9, 10, 11]
+        minor: [7, 8]
     runs-on: ${{ matrix.os }}-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
-      - run: |
-          if (( ${{ matrix.minor }} <= 8 )); then
-              echo "CIBW_BEFORE_BUILD=pip install -r {project}/requirements-build-backward.txt" >> "$GITHUB_ENV"
-              echo "CIBW_BEFORE_TEST=pip install -r {project}/requirements-backward.txt" >> "$GITHUB_ENV"
-          else
-              echo "CIBW_BEFORE_BUILD=pip install -r {project}/requirements-build.txt" >> "$GITHUB_ENV"
-              echo "CIBW_BEFORE_TEST=pip install -r {project}/requirements.txt" >> "$GITHUB_ENV"
-          fi
       - uses: pypa/cibuildwheel@v2.11.2
         with:
           output-dir: dist
         env:
           CIBW_BUILD: cp3${{ matrix.minor }}-*
           CIBW_ARCHS_MACOS: all
+          CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build-backward.txt
+          CIBW_BEFORE_TEST: pip install -r {project}/requirements-backward.txt
           CIBW_TEST_COMMAND: pytest {project}
-
 
       - uses: actions/upload-artifact@v2
         with:
           name: dist
           path: dist
+
+  whl_gte_3_9:
+    name: Build / ${{ matrix.os }} / Python 3.${{ matrix.minor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macOS, Ubuntu, Windows]
+        minor: [9, 10, 11]
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - uses: pypa/cibuildwheel@v2.11.2
+        with:
+          output-dir: dist
+        env:
+          CIBW_BUILD: cp3${{ matrix.minor }}-*
+          CIBW_ARCHS_MACOS: all
+          CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build.txt
+          CIBW_BEFORE_TEST: pip install -r {project}/requirements.txt
+          CIBW_TEST_COMMAND: pytest {project}
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: dist
+          path: dist
+
   upload:
     name: Publish
     if: github.event_name == 'release' && github.event.action == 'published'
