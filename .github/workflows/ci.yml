@@ -8,6 +8,7 @@ on:
       - master
   release:
     types: published
+
 jobs:
   tar_gz:
     name: Package
@@ -76,7 +77,7 @@ jobs:
   upload:
     name: Publish
     if: github.event_name == 'release' && github.event.action == 'published'
-    needs: [tar_gz, whl]
+    needs: [tar_gz, whl_lt_3_9, whl_gte_3_9]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v2
