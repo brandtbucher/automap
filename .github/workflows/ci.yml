@@ -34,12 +34,20 @@ jobs:
       - uses: pypa/cibuildwheel@v2.11.2
         with:
           output-dir: dist
+        run: |
+          if [[ ${{ matrix.minor }} <= 8 ]]; then
+              echo "CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build-backward.txt" >> "$GITHUB_ENV"
+          else
+              echo "CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build.txt" >> "$GITHUB_ENV"
+          fi
         env:
           CIBW_BUILD: cp3${{ matrix.minor }}-*
           CIBW_ARCHS_MACOS: all
-          CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build.txt
+          # CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build.txt
           CIBW_BEFORE_TEST: pip install -r {project}/requirements.txt
           CIBW_TEST_COMMAND: pytest {project}
+
+
       - uses: actions/upload-artifact@v2
         with:
           name: dist
