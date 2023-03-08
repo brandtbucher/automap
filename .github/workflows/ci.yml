@@ -31,15 +31,15 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
-      - uses: pypa/cibuildwheel@v2.11.2
-        with:
-          output-dir: dist
-        run: |
+      - run: |
           if [[ ${{ matrix.minor }} <= 8 ]]; then
               echo "CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build-backward.txt" >> "$GITHUB_ENV"
           else
               echo "CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build.txt" >> "$GITHUB_ENV"
           fi
+      - uses: pypa/cibuildwheel@v2.11.2
+        with:
+          output-dir: dist
         env:
           CIBW_BUILD: cp3${{ matrix.minor }}-*
           CIBW_ARCHS_MACOS: all
