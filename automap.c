@@ -114,6 +114,12 @@ really gives us our awesome performance.
 # define PY_SSIZE_T_CLEAN
 # include "Python.h"
 
+# define PY_ARRAY_UNIQUE_SYMBOL AK_ARRAY_API
+# define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+
+# include "numpy/arrayobject.h"
+# include "numpy/arrayscalars.h"
+
 // PyPy doesn't define Py_UNREACHABLE():
 
 # ifndef Py_UNREACHABLE
@@ -1013,6 +1019,8 @@ static struct PyModuleDef automap_module = {
 PyObject *
 PyInit_automap(void)
 {
+    import_array();
+
     NonUniqueError = PyErr_NewExceptionWithDoc(
             "automap.NonUniqueError",
             "ValueError for non-unique values.",

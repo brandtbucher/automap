@@ -19,7 +19,7 @@ def install(context):
     run(context, f"{sys.executable} -m pip install --upgrade -r requirements.txt")
 
 
-@invoke.task(install)
+@invoke.task()
 def clean(context):
     # type: (invoke.Context) -> None
     run(context, f"{sys.executable} setup.py develop --uninstall")
