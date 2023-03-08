@@ -33,9 +33,9 @@ jobs:
       - uses: actions/setup-python@v2
       - run: |
           if (( ${{ matrix.minor }} <= 8 )); then
-              echo "CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build-backward.txt" >> "$GITHUB_ENV"
+              echo "CIBW_BEFORE_BUILD=pip install -r {project}/requirements-build-backward.txt" >> "$GITHUB_ENV"
           else
-              echo "CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build.txt" >> "$GITHUB_ENV"
+              echo "CIBW_BEFORE_BUILD=pip install -r {project}/requirements-build.txt" >> "$GITHUB_ENV"
           fi
       - uses: pypa/cibuildwheel@v2.11.2
         with:
