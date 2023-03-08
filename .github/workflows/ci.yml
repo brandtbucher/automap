@@ -37,6 +37,7 @@ jobs:
         env:
           CIBW_BUILD: cp3${{ matrix.minor }}-*
           CIBW_ARCHS_MACOS: all
+          CIBW_BEFORE_BUILD: pip install -r {project}/requirements-build.txt
           CIBW_BEFORE_TEST: pip install -r {project}/requirements.txt
           CIBW_TEST_COMMAND: pytest {project}
       - uses: actions/upload-artifact@v2
