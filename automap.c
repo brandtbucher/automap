@@ -141,8 +141,8 @@ typedef struct {
 typedef struct {
     PyObject_VAR_HEAD
     Py_ssize_t tablesize;
-    entry *table;
-    PyObject *keys;
+    entry *table;    // an array of entry structs
+    PyObject *keys;  // I want this to be an immutable NumPy array
 } FAMObject;
 
 
@@ -452,8 +452,11 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     entry *table = self->table;
     Py_ssize_t mask = self->tablesize - 1;
     Py_hash_t mixin = Py_ABS(hash);
-    PyObject **items = PySequence_Fast_ITEMS(self->keys);
-    Py_ssize_t index = hash & mask;
+
+    // seems like this shold be called keys, not items
+    PyObject **items = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
+    Py_ssize_t index = hash & mask; // taking the modulo
+
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             Py_hash_t h = table[index].hash;
