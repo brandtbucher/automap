@@ -135,13 +135,13 @@ really gives us our awesome performance.
 typedef struct {
     Py_ssize_t index;
     Py_hash_t hash;
-} entry;
+} IndexHashPair;
 
 
 typedef struct {
     PyObject_VAR_HEAD
     Py_ssize_t tablesize;
-    entry *table;    // an array of entry structs
+    IndexHashPair *table;    // an array of IndexHashPair structs
     PyObject *keys;  // I want this to be an immutable NumPy array
 } FAMObject;
 
@@ -274,16 +274,16 @@ static PyTypeObject FAMIType = {
 static PyObject *
 iter(FAMObject *map, Kind kind, int reversed)
 {
-    FAMIObject *self = PyObject_New(FAMIObject, &FAMIType);
-    if (!self) {
+    FAMIObject *fami = PyObject_New(FAMIObject, &FAMIType);
+    if (!fami) {
         return NULL;
     }
     Py_INCREF(map);
-    self->map = map;
-    self->kind = kind;
-    self->reversed = reversed;
-    self->index = 0;
-    return (PyObject *)self;
+    fami->map = map;
+    fami->kind = kind;
+    fami->reversed = reversed;
+    fami->index = 0;
+    return (PyObject *)fami;
 }
 
 
@@ -449,7 +449,7 @@ view(FAMObject *map, int kind)
 static Py_ssize_t
 lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 {
-    entry *table = self->table;
+    IndexHashPair *table = self->table;
     Py_ssize_t mask = self->tablesize - 1;
     Py_hash_t mixin = Py_ABS(hash);
 
@@ -567,8 +567,8 @@ grow(FAMObject *self, Py_ssize_t needed)
     if (newsize <= oldsize) {
         return 0;
     }
-    entry *oldentries = self->table;
-    entry *newentries = PyMem_New(entry, newsize + SCAN - 1);
+    IndexHashPair *oldentries = self->table;
+    IndexHashPair *newentries = PyMem_New(IndexHashPair, newsize + SCAN - 1);
     if (!newentries) {
         return -1;
     }
@@ -617,13 +617,13 @@ copy(PyTypeObject *cls, FAMObject *self)
     count += PyList_GET_SIZE(keys);
     new->keys = keys;
     new->tablesize = self->tablesize;
-    new->table = PyMem_New(entry, new->tablesize + SCAN - 1);
+    new->table = PyMem_New(IndexHashPair, new->tablesize + SCAN - 1);
     if (!new->table) {
         Py_DECREF(new);
         return NULL;
     }
     memcpy(new->table, self->table,
-           (new->tablesize + SCAN - 1) * sizeof(entry));
+           (new->tablesize + SCAN - 1) * sizeof(IndexHashPair));
     return new;
 }
 
@@ -678,6 +678,7 @@ fam_length(FAMObject *self)
 }
 
 
+// utility function used in both fam_subscript and  fam_get
 static PyObject *
 get(FAMObject *self, PyObject *key, PyObject *missing) {
     Py_ssize_t result = lookup(self, key);
@@ -821,7 +822,7 @@ fam___sizeof__(FAMObject *self)
     return PyLong_FromSsize_t(
         Py_TYPE(self)->tp_basicsize
         + listbytes
-        + (self->tablesize + SCAN - 1) * sizeof(entry)
+        + (self->tablesize + SCAN - 1) * sizeof(IndexHashPair)
     );
 }
 
