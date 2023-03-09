@@ -435,14 +435,14 @@ static PyTypeObject FAMVType = {
 static PyObject *
 view(FAMObject *map, int kind)
 {
-    FAMVObject *self = (FAMVObject *)PyObject_New(FAMVObject, &FAMVType);
-    if (!self) {
+    FAMVObject *famv = (FAMVObject *)PyObject_New(FAMVObject, &FAMVType);
+    if (!famv) {
         return NULL;
     }
-    self->kind = kind;
-    self->map = map;
+    famv->kind = kind;
+    famv->map = map;
     Py_INCREF(map);
-    return (PyObject *)self;
+    return (PyObject *)famv;
 }
 
 
