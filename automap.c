@@ -498,6 +498,8 @@ lookup(FAMObject *self, PyObject *key) {
         return -1;
     }
     Py_ssize_t index = lookup_hash(self, key, hash);
+
+    // why would the table have a -1 as a hash at this index
     if ((index < 0) || (self->table[index].hash == -1)) {
         return -1;
     }
@@ -694,7 +696,7 @@ get(FAMObject *self, PyObject *key, PyObject *missing) {
         PyErr_SetObject(PyExc_KeyError, key);
         return NULL;
     }
-    // always return the index from the int_cache
+    // use a C-integer to fetch the Python integer
     PyObject *index = PyList_GET_ITEM(int_cache, result);
     Py_INCREF(index);
     return index;

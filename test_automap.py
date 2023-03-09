@@ -97,4 +97,5 @@ def test_contains():
     x = []
     fam = FrozenAutoMap(("a", "b", "c"))
     assert (x in fam.values()) == False
+    # NOTE: exercise x to force seg fault
     assert len(x) == 0
