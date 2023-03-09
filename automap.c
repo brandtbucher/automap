@@ -131,12 +131,22 @@ really gives us our awesome performance.
 # define LOAD 0.9
 # define SCAN 16
 
+//------------------------------------------------------------------------------
+// Common
+
+static PyTypeObject AMType;
+static PyTypeObject FAMIType;
+static PyTypeObject FAMVType;
+static PyTypeObject FAMType;
+static PyObject *NonUniqueError;
+
+static PyObject *int_cache = NULL;
+static Py_ssize_t int_count = 0;
 
 typedef struct {
     Py_ssize_t index;
     Py_hash_t hash;
 } IndexHashPair;
-
 
 typedef struct {
     PyObject_VAR_HEAD
@@ -145,39 +155,23 @@ typedef struct {
     PyObject *keys;  // I want this to be an immutable NumPy array
 } FAMObject;
 
-
 typedef enum {
     ITEMS,
     KEYS,
     VALUES,
-} Kind;
+} ViewKind;
 
 
-typedef struct {
-    PyObject_VAR_HEAD
-    FAMObject *map;
-    Kind kind;
-} FAMVObject;
-
+//------------------------------------------------------------------------------
+// FrozenAutoMapIterator objects
 
 typedef struct {
     PyObject_VAR_HEAD
     FAMObject *map;
-    Kind kind;
+    ViewKind kind;
     int reversed;
-    Py_ssize_t index;
+    Py_ssize_t index; // current index state, mutated in-place
 } FAMIObject;
-
-
-static PyTypeObject AMType;
-static PyTypeObject FAMIType;
-static PyTypeObject FAMVType;
-static PyTypeObject FAMType;
-
-static PyObject *NonUniqueError;
-
-static PyObject *intcache = NULL;
-static Py_ssize_t count = 0;
 
 
 static void
@@ -217,7 +211,7 @@ fami_iternext(FAMIObject *self)
             return PyTuple_Pack(
                 2,
                 PyList_GET_ITEM(self->map->keys, index),
-                PyList_GET_ITEM(intcache, index)
+                PyList_GET_ITEM(int_cache, index)
             );
         }
         case KEYS: {
@@ -226,7 +220,7 @@ fami_iternext(FAMIObject *self)
             return yield;
         }
         case VALUES: {
-            PyObject *yield = PyList_GET_ITEM(intcache, index);
+            PyObject *yield = PyList_GET_ITEM(int_cache, index);
             Py_INCREF(yield);
             return yield;
         }
@@ -243,13 +237,13 @@ fami___length_hint__(FAMIObject *self)
 }
 
 
-static PyObject *iter(FAMObject *, Kind, int);
+static PyObject *fami_new(FAMObject *, ViewKind, int);
 
 
 static PyObject *
 fami___reversed__(FAMIObject *self)
 {
-    return iter(self->map, self->kind, !self->reversed);
+    return fami_new(self->map, self->kind, !self->reversed);
 }
 
 
@@ -272,7 +266,7 @@ static PyTypeObject FAMIType = {
 
 
 static PyObject *
-iter(FAMObject *map, Kind kind, int reversed)
+fami_new(FAMObject *map, ViewKind kind, int reversed)
 {
     FAMIObject *fami = PyObject_New(FAMIObject, &FAMIType);
     if (!fami) {
@@ -286,9 +280,16 @@ iter(FAMObject *map, Kind kind, int reversed)
     return (PyObject *)fami;
 }
 
+//------------------------------------------------------------------------------
+// FrozenAutoMapView objects
 
+typedef struct {
+    PyObject_VAR_HEAD
+    FAMObject *map;
+    ViewKind kind;
+} FAMVObject;
 
-# define SET_OP(name, op)                                 \
+# define FAMV_SET_OP(name, op)                                 \
 static PyObject *                                         \
 name(PyObject *left, PyObject *right)                     \
 {                                                         \
@@ -308,13 +309,12 @@ name(PyObject *left, PyObject *right)                     \
 }
 
 
-SET_OP(famv_and, And)
-SET_OP(famv_or, Or)
-SET_OP(famv_subtract, Subtract)
-SET_OP(famv_xor, Xor)
+FAMV_SET_OP(famv_and, And)
+FAMV_SET_OP(famv_or, Or)
+FAMV_SET_OP(famv_subtract, Subtract)
+FAMV_SET_OP(famv_xor, Xor)
 
-
-# undef SET_OP
+# undef FAMV_SET_OP
 
 
 static PyNumberMethods famv_as_number = {
@@ -326,7 +326,7 @@ static PyNumberMethods famv_as_number = {
 
 
 static int fam_contains(FAMObject *, PyObject *);
-static PyObject *famv_iter(FAMVObject *);
+static PyObject *famv_fami_new(FAMVObject *);
 
 
 static int
@@ -335,12 +335,13 @@ famv_contains(FAMVObject *self, PyObject *other)
     if (self->kind == KEYS) {
         return fam_contains(self->map, other);
     }
-    PyObject *iterator = famv_iter(self);
+    PyObject *iterator = famv_fami_new(self);
     if (!iterator) {
         return -1;
     }
     int result = PySequence_Contains(iterator, other);
-    Py_DECREF(other);
+    // Py_DECREF(other); // previously we did this, which would segfault
+    Py_DECREF(iterator);
     return result;
 }
 
@@ -359,9 +360,9 @@ famv_dealloc(FAMVObject *self)
 
 
 static PyObject *
-famv_iter(FAMVObject *self)
+famv_fami_new(FAMVObject *self)
 {
-    return iter(self->map, self->kind, 0);
+    return fami_new(self->map, self->kind, 0);
 }
 
 
@@ -375,7 +376,7 @@ famv___length_hint__(FAMVObject *self)
 static PyObject *
 famv___reversed__(FAMVObject *self)
 {
-    return iter(self->map, self->kind, 1);
+    return fami_new(self->map, self->kind, 1);
 }
 
 
@@ -392,12 +393,6 @@ famv_isdisjoint(FAMVObject *self, PyObject *other)
 }
 
 
-static PyMethodDef famv_methods[] = {
-    {"__length_hint__", (PyCFunction) famv___length_hint__, METH_NOARGS, NULL},
-    {"__reversed__", (PyCFunction) famv___reversed__, METH_NOARGS, NULL},
-    {"isdisjoint", (PyCFunction) famv_isdisjoint, METH_O, NULL},
-    {NULL},
-};
 
 
 static PyObject *
@@ -418,6 +413,12 @@ famv_richcompare(FAMVObject *self, PyObject *other, int op)
     return result;
 }
 
+static PyMethodDef famv_methods[] = {
+    {"__length_hint__", (PyCFunction) famv___length_hint__, METH_NOARGS, NULL},
+    {"__reversed__", (PyCFunction) famv___reversed__, METH_NOARGS, NULL},
+    {"isdisjoint", (PyCFunction) famv_isdisjoint, METH_O, NULL},
+    {NULL},
+};
 
 static PyTypeObject FAMVType = {
     PyVarObject_HEAD_INIT(NULL, 0)
@@ -425,7 +426,7 @@ static PyTypeObject FAMVType = {
     .tp_as_sequence = &famv_as_sequence,
     .tp_basicsize = sizeof(FAMVObject),
     .tp_dealloc = (destructor) famv_dealloc,
-    .tp_iter = (getiterfunc) famv_iter,
+    .tp_iter = (getiterfunc) famv_fami_new,
     .tp_methods = famv_methods,
     .tp_name = "automap.FrozenAutoMapView",
     .tp_richcompare = (richcmpfunc) famv_richcompare,
@@ -433,7 +434,7 @@ static PyTypeObject FAMVType = {
 
 
 static PyObject *
-view(FAMObject *map, int kind)
+famv_new(FAMObject *map, int kind)
 {
     FAMVObject *famv = (FAMVObject *)PyObject_New(FAMVObject, &FAMVType);
     if (!famv) {
@@ -531,18 +532,18 @@ static int
 fill_intcache(Py_ssize_t size)
 {
     PyObject *item;
-    if (!intcache) {
-        intcache = PyList_New(0);
-        if (!intcache) {
+    if (!int_cache) {
+        int_cache = PyList_New(0);
+        if (!int_cache) {
             return -1;
         }
     }
-    for (Py_ssize_t index = PyList_GET_SIZE(intcache); index < size; index++) {
+    for (Py_ssize_t index = PyList_GET_SIZE(int_cache); index < size; index++) {
         item = PyLong_FromSsize_t(index);
         if (!item) {
             return -1;
         }
-        if (PyList_Append(intcache, item)) {
+        if (PyList_Append(int_cache, item)) {
             Py_DECREF(item);
             return -1;
         }
@@ -614,7 +615,7 @@ copy(PyTypeObject *cls, FAMObject *self)
         Py_DECREF(keys);
         return NULL;
     }
-    count += PyList_GET_SIZE(keys);
+    int_count += PyList_GET_SIZE(keys);
     new->keys = keys;
     new->tablesize = self->tablesize;
     new->table = PyMem_New(IndexHashPair, new->tablesize + SCAN - 1);
@@ -636,7 +637,7 @@ extend(FAMObject *self, PyObject *keys)
         return -1;
     }
     Py_ssize_t extendsize = PySequence_Fast_GET_SIZE(keys);
-    count += extendsize;
+    int_count += extendsize;
     if (grow(self, PyList_GET_SIZE(self->keys) + extendsize)) {
         Py_DECREF(keys);
         return -1;
@@ -658,7 +659,7 @@ extend(FAMObject *self, PyObject *keys)
 static int
 append(FAMObject *self, PyObject *key)
 {
-    count++;
+    int_count++;
     if (grow(self, PyList_GET_SIZE(self->keys) + 1)) {
         return -1;
     }
@@ -678,7 +679,7 @@ fam_length(FAMObject *self)
 }
 
 
-// utility function used in both fam_subscript and  fam_get
+// Given a key for a FAM, return the integer (via the int_cache) associated with that key. Utility function used in both fam_subscript and fam_get
 static PyObject *
 get(FAMObject *self, PyObject *key, PyObject *missing) {
     Py_ssize_t result = lookup(self, key);
@@ -693,7 +694,8 @@ get(FAMObject *self, PyObject *key, PyObject *missing) {
         PyErr_SetObject(PyExc_KeyError, key);
         return NULL;
     }
-    PyObject *index = PyList_GET_ITEM(intcache, result);
+    // always return the index from the int_cache
+    PyObject *index = PyList_GET_ITEM(int_cache, result);
     Py_INCREF(index);
     return index;
 }
@@ -759,19 +761,20 @@ static void
 fam_dealloc(FAMObject *self)
 {
     PyMem_Del(self->table);
-    count -= PyList_GET_SIZE(self->keys);
+    int_count -= PyList_GET_SIZE(self->keys);
     Py_DECREF(self->keys);
-    if (!count) {
-        Py_CLEAR(intcache);
+    if (!int_count) {
+        Py_CLEAR(int_cache);
     }
-    else if (count < PyList_GET_SIZE(intcache)) {
-        // del intcache[count:]
-        PyList_SetSlice(intcache, count, PyList_GET_SIZE(intcache), NULL);
+    else if (int_count < PyList_GET_SIZE(int_cache)) {
+        // del int_cache[int_count:]
+        PyList_SetSlice(int_cache, int_count, PyList_GET_SIZE(int_cache), NULL);
     }
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 
+// Return a hash integer for an entire FAM by combining all stored hashes
 static Py_hash_t
 fam_hash(FAMObject *self)
 {
@@ -789,7 +792,7 @@ fam_hash(FAMObject *self)
 static PyObject *
 fam_iter(FAMObject *self)
 {
-    return iter(self, KEYS, 0);
+    return fami_new(self, KEYS, 0);
 }
 
 
@@ -803,7 +806,7 @@ fam___getnewargs__(FAMObject *self)
 static PyObject *
 fam___reversed__(FAMObject *self)
 {
-    return iter(self, KEYS, 1);
+    return fami_new(self, KEYS, 1);
 }
 
 
@@ -842,34 +845,22 @@ fam_get(FAMObject *self, PyObject *args)
 static PyObject *
 fam_items(FAMObject *self)
 {
-    return view(self, ITEMS);
+    return famv_new(self, ITEMS);
 }
 
 
 static PyObject *
 fam_keys(FAMObject *self)
 {
-    return view(self, KEYS);
+    return famv_new(self, KEYS);
 }
 
 
 static PyObject *
 fam_values(FAMObject *self)
 {
-    return view(self, VALUES);
+    return famv_new(self, VALUES);
 }
-
-
-static PyMethodDef fam_methods[] = {
-    {"__getnewargs__", (PyCFunction) fam___getnewargs__, METH_NOARGS, NULL},
-    {"__reversed__", (PyCFunction) fam___reversed__, METH_NOARGS, NULL},
-    {"__sizeof__", (PyCFunction) fam___sizeof__, METH_NOARGS, NULL},
-    {"get", (PyCFunction) fam_get, METH_VARARGS, NULL},
-    {"items", (PyCFunction) fam_items, METH_NOARGS, NULL},
-    {"keys", (PyCFunction) fam_keys, METH_NOARGS, NULL},
-    {"values", (PyCFunction) fam_values, METH_NOARGS, NULL},
-    {NULL},
-};
 
 
 static PyObject *
@@ -902,7 +893,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return NULL;
     }
     self->keys = keys;
-    count += PyList_GET_SIZE(keys);
+    int_count += PyList_GET_SIZE(keys);
     if (grow(self, PyList_GET_SIZE(keys))) {
         Py_DECREF(self);
         return NULL;
@@ -934,6 +925,17 @@ fam_richcompare(FAMObject *self, PyObject *other, int op)
 }
 
 
+static PyMethodDef fam_methods[] = {
+    {"__getnewargs__", (PyCFunction) fam___getnewargs__, METH_NOARGS, NULL},
+    {"__reversed__", (PyCFunction) fam___reversed__, METH_NOARGS, NULL},
+    {"__sizeof__", (PyCFunction) fam___sizeof__, METH_NOARGS, NULL},
+    {"get", (PyCFunction) fam_get, METH_VARARGS, NULL},
+    {"items", (PyCFunction) fam_items, METH_NOARGS, NULL},
+    {"keys", (PyCFunction) fam_keys, METH_NOARGS, NULL},
+    {"values", (PyCFunction) fam_values, METH_NOARGS, NULL},
+    {NULL},
+};
+
 static PyTypeObject FAMType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_as_mapping = &fam_as_mapping,
@@ -951,6 +953,10 @@ static PyTypeObject FAMType = {
     .tp_richcompare = (richcmpfunc) fam_richcompare,
 };
 
+
+
+//------------------------------------------------------------------------------
+// AutoMap subclass
 
 static PyObject *
 am_inplace_or(FAMObject *self, PyObject *other)
@@ -1000,7 +1006,6 @@ static PyMethodDef am_methods[] = {
     {NULL},
 };
 
-
 static PyTypeObject AMType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_as_number = &am_as_number,
@@ -1011,6 +1016,9 @@ static PyTypeObject AMType = {
     .tp_richcompare = (richcmpfunc) fam_richcompare,
 };
 
+
+//------------------------------------------------------------------------------
+// module definition
 
 static struct PyModuleDef automap_module = {
     .m_base = PyModuleDef_HEAD_INIT,
