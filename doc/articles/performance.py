@@ -110,7 +110,7 @@ class DictItems(MapProcessor):
 
 
 #-------------------------------------------------------------------------------
-NUMBER = 1
+NUMBER = 100
 
 from itertools import product
 
@@ -176,7 +176,7 @@ def plot_performance(frame):
                     labelbottom=False,
                     )
 
-    fig.set_size_inches(7, 4) # width, height
+    fig.set_size_inches(8, 4) # width, height
     fig.legend(post, names_display, loc='center right', fontsize=6)
     # horizontal, vertical
     fig.text(.05, .96, f'AutoMap Performance: {NUMBER} Iterations', fontsize=10)
@@ -188,7 +188,7 @@ def plot_performance(frame):
             bottom=0.05,
             right=0.80,
             top=0.80,
-            wspace=0.5, # width
+            wspace=0.6, # width
             hspace=0.5,
             )
     # plt.rcParams.update({'font.size': 22})
@@ -216,7 +216,7 @@ class FixtureFactory:
 
 
 class FFInt(FixtureFactory):
-    NAME = 'int-64'
+    NAME = 'int64'
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
@@ -225,20 +225,37 @@ class FFInt(FixtureFactory):
         return array
 
 class FFFloat(FixtureFactory):
-    NAME = 'float-64'
+    NAME = 'float64'
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = np.arange(size) / 0.5
+        array = np.arange(size) * 0.5
         array.flags.writeable = False
         return array
 
 class FFString(FixtureFactory):
-    NAME = 'string-U4'
+    NAME = 'string'
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
         array = np.array([hex(e) for e in range(size)])
+        array.flags.writeable = False
+        return array
+
+class FFObject(FixtureFactory):
+    NAME = 'object'
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        ints = np.arange(size)
+        array = ints.astype(object)
+
+        target = 1 == ints % 3
+        array[target] = ints[target] * 0.5
+
+        target = 2 == ints % 3
+        array[target] = np.array([hex(e) for e in ints[target]])
+
         array.flags.writeable = False
         return array
 
@@ -269,8 +286,8 @@ CLS_FF = (
     FFInt,
     FFFloat,
     FFString,
+    FFObject,
 )
-
 
 def run_test():
     records = []
