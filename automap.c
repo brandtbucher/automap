@@ -147,10 +147,11 @@ typedef struct {
     Py_hash_t hash;
 } TableElement;
 
-typedef struct {
-    TableElement *table;
-    Py_ssize_t table_size;
-} HashTable;
+// could store all Table components together, but would need to dynamically alloc the full struct
+// typedef struct {
+//     TableElement *table;
+//     Py_ssize_t table_size;
+// } HashTable;
 
 typedef struct {
     PyObject_VAR_HEAD
