@@ -122,6 +122,7 @@ def seconds_to_display(seconds: float) -> str:
         return f'{seconds * 1e3: .1f} (ms)'
     return f'{seconds: .1f} (s)'
 
+GROUPS = 3
 
 def plot_performance(frame):
     fixture_total = len(frame['fixture'].unique())
@@ -130,14 +131,13 @@ def plot_performance(frame):
     fig, axes = plt.subplots(cat_total, fixture_total)
 
     # cmap = plt.get_cmap('terrain')
-    cmap = plt.get_cmap('plasma')
 
+    cmap = plt.get_cmap('plasma')
     color_raw = cmap(np.arange(processor_total) / processor_total)
     color = []
-    for i in range(3):
-        for j in range(0, processor_total, 3):
+    for i in range(GROUPS):
+        for j in range(0, processor_total, GROUPS):
             color.append(color_raw[i + j])
-    # import ipdb; ipdb.set_trace()
 
     # category is the size of the array
     for cat_count, (cat_label, cat) in enumerate(frame.groupby('size')):
