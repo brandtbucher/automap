@@ -71,7 +71,7 @@ def do_work(info):
     return items, create, access, size
 
 
-@invoke.task(test)
+@invoke.task(build)
 def performance(context):
     # type: (invoke.Context) -> None
     print("TYPE\tITEMS\tCREATE\tACCESS\tSIZE")
@@ -84,6 +84,7 @@ def performance(context):
             total_create = []
             total_access = []
             total_size = []
+
             for items, create, access, size in pool.imap(
                 do_work, itertools.product((kind,), range(6), range(1, 10))
             ):
