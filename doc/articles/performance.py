@@ -61,24 +61,27 @@ class FAMLLookup(MapProcessor):
     SORT = 0
 
     def __call__(self):
+        m = self.faml
         for k in self.list:
-            _ = self.faml[k]
+            _ = m[k]
 
 class FAMALookup(MapProcessor):
     NAME = 'FAM(A), lookup'
     SORT = 0
 
     def __call__(self):
+        m = self.fama
         for k in self.list:
-            _ = self.fama[k]
+            _ = m[k]
 
 class DictLookup(MapProcessor):
     NAME = 'Dict, lookup'
     SORT = 0
 
     def __call__(self):
+        m = self.d
         for k in self.list:
-            _ = self.d[k]
+            _ = m[k]
 
 #-------------------------------------------------------------------------------
 class FAMLItems(MapProcessor):
@@ -106,13 +109,10 @@ class DictItems(MapProcessor):
             pass
 
 
-
-
-
-
-
 #-------------------------------------------------------------------------------
-NUMBER = 100
+NUMBER = 1
+
+from itertools import product
 
 def seconds_to_display(seconds: float) -> str:
     seconds /= NUMBER
@@ -132,7 +132,12 @@ def plot_performance(frame):
     # cmap = plt.get_cmap('terrain')
     cmap = plt.get_cmap('plasma')
 
-    color = cmap(np.arange(processor_total) / processor_total)
+    color_raw = cmap(np.arange(processor_total) / processor_total)
+    color = []
+    for i in range(3):
+        for j in range(0, processor_total, 3):
+            color.append(color_raw[i + j])
+    # import ipdb; ipdb.set_trace()
 
     # category is the size of the array
     for cat_count, (cat_label, cat) in enumerate(frame.groupby('size')):
@@ -171,8 +176,8 @@ def plot_performance(frame):
                     labelbottom=False,
                     )
 
-    fig.set_size_inches(9, 3.5) # width, height
-    fig.legend(post, names_display, loc='center right', fontsize=8)
+    fig.set_size_inches(7, 4) # width, height
+    fig.legend(post, names_display, loc='center right', fontsize=6)
     # horizontal, vertical
     fig.text(.05, .96, f'AutoMap Performance: {NUMBER} Iterations', fontsize=10)
     fig.text(.05, .90, get_versions(), fontsize=6)
