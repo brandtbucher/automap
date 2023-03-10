@@ -140,18 +140,22 @@ static PyTypeObject FAMVType;
 static PyTypeObject FAMType;
 static PyObject *NonUniqueError;
 
-static PyObject *int_cache = NULL;
-static Py_ssize_t int_count = 0;
+
+// The main storage "table" is an array of TableElement
+typedef struct {
+    Py_ssize_t keys_pos;
+    Py_hash_t hash;
+} TableElement;
 
 typedef struct {
-    Py_ssize_t index;
-    Py_hash_t hash;
-} IndexHashPair;
+    TableElement *table;
+    Py_ssize_t table_size;
+} HashTable;
 
 typedef struct {
     PyObject_VAR_HEAD
-    Py_ssize_t tablesize;
-    IndexHashPair *table;    // an array of IndexHashPair structs
+    Py_ssize_t table_size;
+    TableElement *table;    // an array of TableElement structs
     PyObject *keys;  // I want this to be an immutable NumPy array
 } FAMObject;
 
@@ -163,11 +167,56 @@ typedef enum {
 
 
 //------------------------------------------------------------------------------
+// the global int_cache is shared among all instances
+
+static PyObject *int_cache = NULL;
+static Py_ssize_t int_cache_count = 0;
+
+// Fill the int_cache up to size with PyObject ints.
+static int
+int_cache_fill(Py_ssize_t size)
+{
+    PyObject *item;
+    if (!int_cache) {
+        int_cache = PyList_New(0);
+        if (!int_cache) {
+            return -1;
+        }
+    }
+    for (Py_ssize_t index = PyList_GET_SIZE(int_cache); index < size; index++) {
+        item = PyLong_FromSsize_t(index);
+        if (!item) {
+            return -1;
+        }
+        if (PyList_Append(int_cache, item)) {
+            Py_DECREF(item);
+            return -1;
+        }
+        Py_DECREF(item);
+    }
+    return 0;
+}
+
+// Conform the size of the int_cache to the requested size
+void
+int_cache_remove(Py_ssize_t size)
+{
+    if (!size) {
+        Py_CLEAR(int_cache);
+    }
+    else if (size < PyList_GET_SIZE(int_cache)) {
+        // del int_cache[size:]
+        PyList_SetSlice(int_cache, size, PyList_GET_SIZE(int_cache), NULL);
+    }
+}
+
+
+//------------------------------------------------------------------------------
 // FrozenAutoMapIterator objects
 
 typedef struct {
     PyObject_VAR_HEAD
-    FAMObject *map;
+    FAMObject *fam;
     ViewKind kind;
     int reversed;
     Py_ssize_t index; // current index state, mutated in-place
@@ -177,7 +226,7 @@ typedef struct {
 static void
 fami_dealloc(FAMIObject *self)
 {
-    Py_DECREF(self->map);
+    Py_DECREF(self->fam);
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -190,12 +239,13 @@ fami_iter(FAMIObject *self)
 }
 
 
+// For a FAMI, Return appropriate PyObject for items, keys, and values. When values are needed they are retrieved from the int_cache
 static PyObject *
 fami_iternext(FAMIObject *self)
 {
     Py_ssize_t index;
     if (self->reversed) {
-        index = PyList_GET_SIZE(self->map->keys) - ++self->index;
+        index = PyList_GET_SIZE(self->fam->keys) - ++self->index;
         if (index < 0) {
             return NULL;
         }
@@ -203,19 +253,19 @@ fami_iternext(FAMIObject *self)
     else {
         index = self->index++;
     }
-    if (PyList_GET_SIZE(self->map->keys) <= index) {
+    if (PyList_GET_SIZE(self->fam->keys) <= index) {
         return NULL;
     }
     switch (self->kind) {
         case ITEMS: {
             return PyTuple_Pack(
                 2,
-                PyList_GET_ITEM(self->map->keys, index),
+                PyList_GET_ITEM(self->fam->keys, index),
                 PyList_GET_ITEM(int_cache, index)
             );
         }
         case KEYS: {
-            PyObject *yield = PyList_GET_ITEM(self->map->keys, index);
+            PyObject *yield = PyList_GET_ITEM(self->fam->keys, index);
             Py_INCREF(yield);
             return yield;
         }
@@ -232,7 +282,7 @@ fami_iternext(FAMIObject *self)
 static PyObject *
 fami___length_hint__(FAMIObject *self)
 {
-    Py_ssize_t len = Py_MAX(0, PyList_GET_SIZE(self->map->keys) - self->index);
+    Py_ssize_t len = Py_MAX(0, PyList_GET_SIZE(self->fam->keys) - self->index);
     return PyLong_FromSsize_t(len);
 }
 
@@ -243,7 +293,7 @@ static PyObject *fami_new(FAMObject *, ViewKind, int);
 static PyObject *
 fami___reversed__(FAMIObject *self)
 {
-    return fami_new(self->map, self->kind, !self->reversed);
+    return fami_new(self->fam, self->kind, !self->reversed);
 }
 
 
@@ -266,14 +316,14 @@ static PyTypeObject FAMIType = {
 
 
 static PyObject *
-fami_new(FAMObject *map, ViewKind kind, int reversed)
+fami_new(FAMObject *fam, ViewKind kind, int reversed)
 {
     FAMIObject *fami = PyObject_New(FAMIObject, &FAMIType);
     if (!fami) {
         return NULL;
     }
-    Py_INCREF(map);
-    fami->map = map;
+    Py_INCREF(fam);
+    fami->fam = fam;
     fami->kind = kind;
     fami->reversed = reversed;
     fami->index = 0;
@@ -283,9 +333,11 @@ fami_new(FAMObject *map, ViewKind kind, int reversed)
 //------------------------------------------------------------------------------
 // FrozenAutoMapView objects
 
+
+// A FAMVObject contains a reference to the FAM from which it was derived
 typedef struct {
     PyObject_VAR_HEAD
-    FAMObject *map;
+    FAMObject *fam;
     ViewKind kind;
 } FAMVObject;
 
@@ -333,7 +385,7 @@ static int
 famv_contains(FAMVObject *self, PyObject *other)
 {
     if (self->kind == KEYS) {
-        return fam_contains(self->map, other);
+        return fam_contains(self->fam, other);
     }
     PyObject *iterator = famv_fami_new(self);
     if (!iterator) {
@@ -354,7 +406,7 @@ static PySequenceMethods famv_as_sequence = {
 static void
 famv_dealloc(FAMVObject *self)
 {
-    Py_DECREF(self->map);
+    Py_DECREF(self->fam);
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -362,21 +414,21 @@ famv_dealloc(FAMVObject *self)
 static PyObject *
 famv_fami_new(FAMVObject *self)
 {
-    return fami_new(self->map, self->kind, 0);
+    return fami_new(self->fam, self->kind, 0);
 }
 
 
 static PyObject *
 famv___length_hint__(FAMVObject *self)
 {
-    return PyLong_FromSsize_t(PyList_GET_SIZE(self->map->keys));
+    return PyLong_FromSsize_t(PyList_GET_SIZE(self->fam->keys));
 }
 
 
 static PyObject *
 famv___reversed__(FAMVObject *self)
 {
-    return fami_new(self->map, self->kind, 1);
+    return fami_new(self->fam, self->kind, 1);
 }
 
 
@@ -391,9 +443,6 @@ famv_isdisjoint(FAMVObject *self, PyObject *other)
     Py_DECREF(intersection);
     return PyBool_FromLong(result);
 }
-
-
-
 
 static PyObject *
 famv_richcompare(FAMVObject *self, PyObject *other, int op)
@@ -434,46 +483,47 @@ static PyTypeObject FAMVType = {
 
 
 static PyObject *
-famv_new(FAMObject *map, int kind)
+famv_new(FAMObject *fam, int kind)
 {
     FAMVObject *famv = (FAMVObject *)PyObject_New(FAMVObject, &FAMVType);
     if (!famv) {
         return NULL;
     }
     famv->kind = kind;
-    famv->map = map;
-    Py_INCREF(map);
+    famv->fam = fam;
+    Py_INCREF(fam);
     return (PyObject *)famv;
 }
 
-
+// Given a key and a computed hash, return the table_pos if that hash and key are found
 static Py_ssize_t
 lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 {
-    IndexHashPair *table = self->table;
-    Py_ssize_t mask = self->tablesize - 1;
+    TableElement *table = self->table;
+    Py_ssize_t mask = self->table_size - 1;
     Py_hash_t mixin = Py_ABS(hash);
 
-    // seems like this shold be called keys, not items
-    PyObject **items = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
-    Py_ssize_t index = hash & mask; // taking the modulo
+    PyObject **keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
+    Py_ssize_t table_pos = hash & mask; // taking the modulo
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
-            Py_hash_t h = table[index].hash;
+            Py_hash_t h = table[table_pos].hash;
             if (h == -1) {
                 // Miss.
-                return index;
+                return table_pos;
             }
             if (h != hash) {
                 // Collision.
-                index++;
+                table_pos++;
                 continue;
             }
-            PyObject *guess = items[table[index].index];
+            PyObject *guess = keys[table[table_pos].keys_pos];
+
+            // try object id compare first
             if (guess == key) {
                 // Hit.
-                return index;
+                return table_pos;
             }
             int result = PyObject_RichCompareBool(guess, key, Py_EQ);
             if (result < 0) {
@@ -482,33 +532,34 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
             }
             if (result) {
                 // Hit.
-                return index;
+                return table_pos;
             }
-            index++;
+            table_pos++;
         }
-        index = (5 * (index - SCAN) + (mixin >>= 1) + 1) & mask;
+        table_pos = (5 * (table_pos - SCAN) + (mixin >>= 1) + 1) & mask;
     }
 }
 
 
+// Given a key, return the Py_ssize_t keys position value stored in the TableElement
 static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
     Py_hash_t hash = PyObject_Hash(key);
     if (hash == -1) {
         return -1;
     }
-    Py_ssize_t index = lookup_hash(self, key, hash);
+    Py_ssize_t table_pos = lookup_hash(self, key, hash);
 
     // why would the table have a -1 as a hash at this index
-    if ((index < 0) || (self->table[index].hash == -1)) {
+    if ((table_pos < 0) || (self->table[table_pos].hash == -1)) {
         return -1;
     }
-    return self->table[index].index;
+    return self->table[table_pos].keys_pos;
 }
 
-
+// Insert a key_pos, hash pair into the table. Assumes table already has appropriate size. Return 0 on success, -1 on error.
 static int
-insert(FAMObject *self, PyObject *key, Py_ssize_t offset, Py_hash_t hash)
+insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
 {
     if (hash == -1) {
         hash = PyObject_Hash(key);
@@ -516,87 +567,70 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t offset, Py_hash_t hash)
             return -1;
         }
     }
-    Py_ssize_t index = lookup_hash(self, key, hash);
-    if (index < 0) {
+    Py_ssize_t table_pos = lookup_hash(self, key, hash);
+    if (table_pos < 0) {
         return -1;
     }
-    if (self->table[index].hash != -1) {
+    if (self->table[table_pos].hash != -1) {
         PyErr_SetObject(NonUniqueError, key);
         return -1;
     }
-    self->table[index].index = offset;
-    self->table[index].hash = hash;
+    self->table[table_pos].keys_pos = keys_pos;
+    self->table[table_pos].hash = hash;
     return 0;
 }
 
 
+// Returns 0 on succes, -1 on failure.
 static int
-fill_intcache(Py_ssize_t size)
+grow_table(FAMObject *self, Py_ssize_t needed)
 {
-    PyObject *item;
-    if (!int_cache) {
-        int_cache = PyList_New(0);
-        if (!int_cache) {
-            return -1;
-        }
-    }
-    for (Py_ssize_t index = PyList_GET_SIZE(int_cache); index < size; index++) {
-        item = PyLong_FromSsize_t(index);
-        if (!item) {
-            return -1;
-        }
-        if (PyList_Append(int_cache, item)) {
-            Py_DECREF(item);
-            return -1;
-        }
-        Py_DECREF(item);
-    }
-    return 0;
-}
-
-
-static int
-grow(FAMObject *self, Py_ssize_t needed)
-{
-    if (fill_intcache(needed)) {
+    if (int_cache_fill(needed)) {
         return -1;
     }
-    Py_ssize_t oldsize = self->tablesize;
-    Py_ssize_t newsize = 1;
+    Py_ssize_t size_old = self->table_size;
+    Py_ssize_t size_new = 1;
     needed /= LOAD;
-    while (newsize <= needed) {
-        newsize <<= 1;
+
+    while (size_new <= needed) {
+        size_new <<= 1;
     }
-    if (newsize <= oldsize) {
+    if (size_new <= size_old) {
         return 0;
     }
-    IndexHashPair *oldentries = self->table;
-    IndexHashPair *newentries = PyMem_New(IndexHashPair, newsize + SCAN - 1);
-    if (!newentries) {
+
+    TableElement *table_old = self->table;
+    TableElement *table_new = PyMem_New(TableElement, size_new + SCAN - 1);
+    if (!table_new) {
         return -1;
     }
-    Py_ssize_t index;
-    for (index = 0; index < newsize + SCAN - 1; index++) {
-        newentries[index].hash = -1;
-        newentries[index].index = -1;
+
+    Py_ssize_t table_pos;
+    for (table_pos = 0; table_pos < size_new + SCAN - 1; table_pos++) {
+        table_new[table_pos].hash = -1;
+        table_new[table_pos].keys_pos = -1;
     }
-    self->table = newentries;
-    self->tablesize = newsize;
-    if (oldsize) {
-        for (index = 0; index < oldsize + SCAN - 1; index++) {
-            if ((oldentries[index].hash != -1) &&
-                insert(self, PyList_GET_ITEM(self->keys,
-                                             oldentries[index].index),
-                       oldentries[index].index, oldentries[index].hash))
+    self->table = table_new;
+    self->table_size = size_new;
+
+    // if we have an old table, move them into the new table
+    if (size_old) {
+        for (table_pos = 0; table_pos < size_old + SCAN - 1; table_pos++) {
+            if ((table_old[table_pos].hash != -1) &&
+                insert(self,
+                        PyList_GET_ITEM(self->keys, table_old[table_pos].keys_pos),
+                        table_old[table_pos].keys_pos,
+                        table_old[table_pos].hash))
             {
+                // on error, delete the new table and re-assign the old
                 PyMem_Del(self->table);
-                self->table = oldentries;
-                self->tablesize = oldsize;
+                self->table = table_old;
+                self->table_size = size_old;
                 return -1;
             }
         }
     }
-    PyMem_Del(oldentries);
+    PyMem_Del(table_old);
     return 0;
 }
 
@@ -617,16 +651,17 @@ copy(PyTypeObject *cls, FAMObject *self)
         Py_DECREF(keys);
         return NULL;
     }
-    int_count += PyList_GET_SIZE(keys);
+    int_cache_count += PyList_GET_SIZE(keys);
     new->keys = keys;
-    new->tablesize = self->tablesize;
-    new->table = PyMem_New(IndexHashPair, new->tablesize + SCAN - 1);
+    new->table_size = self->table_size;
+
+    Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
+    new->table = PyMem_New(TableElement, table_size_alloc);
     if (!new->table) {
         Py_DECREF(new);
         return NULL;
     }
-    memcpy(new->table, self->table,
-           (new->tablesize + SCAN - 1) * sizeof(IndexHashPair));
+    memcpy(new->table, self->table, table_size_alloc * sizeof(TableElement));
     return new;
 }
 
@@ -638,16 +673,18 @@ extend(FAMObject *self, PyObject *keys)
     if (!keys) {
         return -1;
     }
-    Py_ssize_t extendsize = PySequence_Fast_GET_SIZE(keys);
-    int_count += extendsize;
-    if (grow(self, PyList_GET_SIZE(self->keys) + extendsize)) {
+    Py_ssize_t size_extend = PySequence_Fast_GET_SIZE(keys);
+    int_cache_count += size_extend;
+
+    if (grow_table(self, PyList_GET_SIZE(self->keys) + size_extend)) {
         Py_DECREF(keys);
         return -1;
     }
-    PyObject **items = PySequence_Fast_ITEMS(keys);
-    for (Py_ssize_t index = 0; index < extendsize; index++) {
-        if (insert(self, items[index], PyList_GET_SIZE(self->keys), -1) ||
-            PyList_Append(self->keys, items[index]))
+    PyObject **keys_array = PySequence_Fast_ITEMS(keys);
+
+    for (Py_ssize_t index = 0; index < size_extend; index++) {
+        if (insert(self, keys_array[index], PyList_GET_SIZE(self->keys), -1) ||
+            PyList_Append(self->keys, keys_array[index]))
         {
             Py_DECREF(keys);
             return -1;
@@ -661,8 +698,8 @@ extend(FAMObject *self, PyObject *keys)
 static int
 append(FAMObject *self, PyObject *key)
 {
-    int_count++;
-    if (grow(self, PyList_GET_SIZE(self->keys) + 1)) {
+    int_cache_count++;
+    if (grow_table(self, PyList_GET_SIZE(self->keys) + 1)) {
         return -1;
     }
     if (insert(self, key, PyList_GET_SIZE(self->keys), -1) ||
@@ -681,7 +718,7 @@ fam_length(FAMObject *self)
 }
 
 
-// Given a key for a FAM, return the integer (via the int_cache) associated with that key. Utility function used in both fam_subscript and fam_get
+// Given a key for a FAM, return the Python integer (via the int_cache) associated with that key. Utility function used in both fam_subscript() and fam_get()
 static PyObject *
 get(FAMObject *self, PyObject *key, PyObject *missing) {
     Py_ssize_t result = lookup(self, key);
@@ -763,16 +800,10 @@ static void
 fam_dealloc(FAMObject *self)
 {
     PyMem_Del(self->table);
-    int_count -= PyList_GET_SIZE(self->keys);
+    int_cache_count -= PyList_GET_SIZE(self->keys);
     Py_DECREF(self->keys);
-    if (!int_count) {
-        Py_CLEAR(int_cache);
-    }
-    else if (int_count < PyList_GET_SIZE(int_cache)) {
-        // del int_cache[int_count:]
-        PyList_SetSlice(int_cache, int_count, PyList_GET_SIZE(int_cache), NULL);
-    }
     Py_TYPE(self)->tp_free((PyObject *)self);
+    int_cache_remove(int_cache_count);
 }
 
 
@@ -781,7 +812,7 @@ static Py_hash_t
 fam_hash(FAMObject *self)
 {
     Py_hash_t hash = 0;
-    for (Py_ssize_t i = 0; i < self->tablesize; i++) {
+    for (Py_ssize_t i = 0; i < self->table_size; i++) {
         hash = hash * 3 + self->table[i].hash;
     }
     if (hash == -1) {
@@ -827,7 +858,7 @@ fam___sizeof__(FAMObject *self)
     return PyLong_FromSsize_t(
         Py_TYPE(self)->tp_basicsize
         + listbytes
-        + (self->tablesize + SCAN - 1) * sizeof(IndexHashPair)
+        + (self->table_size + SCAN - 1) * sizeof(TableElement)
     );
 }
 
@@ -873,10 +904,12 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         PyErr_Format(PyExc_TypeError, "%s takes no keyword arguments", name);
         return NULL;
     }
+
     PyObject *keys = NULL;
     if (!PyArg_UnpackTuple(args, name, 0, 1, &keys)) {
         return NULL;
     }
+
     if (!keys) {
         keys = PyList_New(0);
     }
@@ -886,17 +919,20 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     else {
         keys = PySequence_List(keys);
     }
+
     if (!keys) {
         return NULL;
     }
+
     FAMObject *self = (FAMObject *)cls->tp_alloc(cls, 0);
     if (!self) {
         Py_DECREF(keys);
         return NULL;
     }
+
     self->keys = keys;
-    int_count += PyList_GET_SIZE(keys);
-    if (grow(self, PyList_GET_SIZE(keys))) {
+    int_cache_count += PyList_GET_SIZE(keys);
+    if (grow_table(self, PyList_GET_SIZE(keys))) {
         Py_DECREF(self);
         return NULL;
     }
@@ -945,7 +981,7 @@ static PyTypeObject FAMType = {
     .tp_as_sequence = &fam_as_sequence,
     .tp_basicsize = sizeof(FAMObject),
     .tp_dealloc = (destructor) fam_dealloc,
-    .tp_doc = "An immutable autoincremented integer-valued mapping.",
+    .tp_doc = "An immutable auto-incremented integer-valued mapping.",
     .tp_hash = (hashfunc) fam_hash,
     .tp_iter = (getiterfunc) fam_iter,
     .tp_methods = fam_methods,
