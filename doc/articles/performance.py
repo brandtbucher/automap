@@ -1,6 +1,3 @@
-
-
-
 import os
 import sys
 import timeit
@@ -18,9 +15,8 @@ import pandas as pd
 sys.path.append(os.getcwd())
 
 
-
 class MapProcessor:
-    NAME = ''
+    NAME = ""
     SORT = -1
 
     def __init__(self, array: np.ndarray):
@@ -30,34 +26,38 @@ class MapProcessor:
         self.fama = FrozenAutoMap(self.array)
         self.d = dict(zip(self.list, range(len(self.list))))
 
-#-------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------
 class FAMLInstantiate(MapProcessor):
-    NAME = 'FAM(L): instantiate'
+    NAME = "FAM(L): instantiate"
     SORT = 0
 
     def __call__(self):
         fam = FrozenAutoMap(self.list)
         assert len(fam) == len(self.list)
 
+
 class FAMAInstantiate(MapProcessor):
-    NAME = 'FAM(A), instantiate'
+    NAME = "FAM(A), instantiate"
     SORT = 0
 
     def __call__(self):
         fam = FrozenAutoMap(self.array)
         assert len(fam) == len(self.list)
 
+
 class DictInstantiate(MapProcessor):
-    NAME = 'Dict, instantiate'
+    NAME = "Dict, instantiate"
     SORT = 0
 
     def __call__(self):
         d = dict(zip(self.list, range(len(self.list))))
         assert len(d) == len(self.list)
 
-#-------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------
 class FAMLLookup(MapProcessor):
-    NAME = 'FAM(L): lookup'
+    NAME = "FAM(L): lookup"
     SORT = 0
 
     def __call__(self):
@@ -65,8 +65,9 @@ class FAMLLookup(MapProcessor):
         for k in self.list:
             _ = m[k]
 
+
 class FAMALookup(MapProcessor):
-    NAME = 'FAM(A), lookup'
+    NAME = "FAM(A), lookup"
     SORT = 0
 
     def __call__(self):
@@ -74,8 +75,9 @@ class FAMALookup(MapProcessor):
         for k in self.list:
             _ = m[k]
 
+
 class DictLookup(MapProcessor):
-    NAME = 'Dict, lookup'
+    NAME = "Dict, lookup"
     SORT = 0
 
     def __call__(self):
@@ -83,25 +85,28 @@ class DictLookup(MapProcessor):
         for k in self.list:
             _ = m[k]
 
-#-------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------
 class FAMLItems(MapProcessor):
-    NAME = 'FAM(L): items'
+    NAME = "FAM(L): items"
     SORT = 0
 
     def __call__(self):
         for k, v in self.faml.items():
             pass
 
+
 class FAMAItems(MapProcessor):
-    NAME = 'FAM(A), items'
+    NAME = "FAM(A), items"
     SORT = 0
 
     def __call__(self):
         for k, v in self.fama.items():
             pass
 
+
 class DictItems(MapProcessor):
-    NAME = 'Dict, items'
+    NAME = "Dict, items"
     SORT = 0
 
     def __call__(self):
@@ -109,30 +114,33 @@ class DictItems(MapProcessor):
             pass
 
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 NUMBER = 100
 
 from itertools import product
 
+
 def seconds_to_display(seconds: float) -> str:
     seconds /= NUMBER
     if seconds < 1e-4:
-        return f'{seconds * 1e6: .1f} (µs)'
+        return f"{seconds * 1e6: .1f} (µs)"
     if seconds < 1e-1:
-        return f'{seconds * 1e3: .1f} (ms)'
-    return f'{seconds: .1f} (s)'
+        return f"{seconds * 1e3: .1f} (ms)"
+    return f"{seconds: .1f} (s)"
+
 
 GROUPS = 3
 
+
 def plot_performance(frame):
-    fixture_total = len(frame['fixture'].unique())
-    cat_total = len(frame['size'].unique())
-    processor_total = len(frame['cls_processor'].unique())
+    fixture_total = len(frame["fixture"].unique())
+    cat_total = len(frame["size"].unique())
+    processor_total = len(frame["cls_processor"].unique())
     fig, axes = plt.subplots(cat_total, fixture_total)
 
     # cmap = plt.get_cmap('terrain')
 
-    cmap = plt.get_cmap('plasma')
+    cmap = plt.get_cmap("plasma")
     color_raw = cmap(np.arange(processor_total) / processor_total)
     color = []
     for i in range(GROUPS):
@@ -140,70 +148,76 @@ def plot_performance(frame):
             color.append(color_raw[i + j])
 
     # category is the size of the array
-    for cat_count, (cat_label, cat) in enumerate(frame.groupby('size')):
+    for cat_count, (cat_label, cat) in enumerate(frame.groupby("size")):
         for fixture_count, (fixture_label, fixture) in enumerate(
-                cat.groupby('fixture')):
+            cat.groupby("fixture")
+        ):
             ax = axes[cat_count][fixture_count]
 
             # set order
-            fixture['sort'] = [f.SORT for f in fixture['cls_processor']]
-            fixture = fixture.sort_values('sort')
+            fixture["sort"] = [f.SORT for f in fixture["cls_processor"]]
+            fixture = fixture.sort_values("sort")
 
-            results = fixture['time'].values.tolist()
-            names = [cls.NAME for cls in fixture['cls_processor']]
+            results = fixture["time"].values.tolist()
+            names = [cls.NAME for cls in fixture["cls_processor"]]
             # x = np.arange(len(results))
             names_display = names
             post = ax.bar(names_display, results, color=color)
 
             # density, position = fixture_label.split('-')
             # cat_label is the size of the array
-            title = f'{cat_label:.0e}\n{fixture_label}'
+            title = f"{cat_label:.0e}\n{fixture_label}"
 
             ax.set_title(title, fontsize=6)
-            ax.set_box_aspect(0.6) # makes taller tan wide
-            time_max = fixture['time'].max()
+            ax.set_box_aspect(0.6)  # makes taller tan wide
+            time_max = fixture["time"].max()
             ax.set_yticks([0, time_max * 0.5, time_max])
-            ax.set_yticklabels(['',
-                    seconds_to_display(time_max * .5),
+            ax.set_yticklabels(
+                [
+                    "",
+                    seconds_to_display(time_max * 0.5),
                     seconds_to_display(time_max),
-                    ], fontsize=6)
+                ],
+                fontsize=6,
+            )
             # ax.set_xticks(x, names_display, rotation='vertical')
             ax.tick_params(
-                    axis='x',
-                    which='both',
-                    bottom=False,
-                    top=False,
-                    labelbottom=False,
-                    )
-
-    fig.set_size_inches(8, 4) # width, height
-    fig.legend(post, names_display, loc='center right', fontsize=6)
-    # horizontal, vertical
-    fig.text(.05, .96, f'AutoMap Performance: {NUMBER} Iterations', fontsize=10)
-    fig.text(.05, .90, get_versions(), fontsize=6)
-
-    fp = '/tmp/automap.png'
-    plt.subplots_adjust(
-            left=0.075,
-            bottom=0.05,
-            right=0.80,
-            top=0.80,
-            wspace=0.6, # width
-            hspace=0.5,
+                axis="x",
+                which="both",
+                bottom=False,
+                top=False,
+                labelbottom=False,
             )
+
+    fig.set_size_inches(8, 4)  # width, height
+    fig.legend(post, names_display, loc="center right", fontsize=6)
+    # horizontal, vertical
+    fig.text(0.05, 0.96, f"AutoMap Performance: {NUMBER} Iterations", fontsize=10)
+    fig.text(0.05, 0.90, get_versions(), fontsize=6)
+
+    fp = "/tmp/automap.png"
+    plt.subplots_adjust(
+        left=0.075,
+        bottom=0.05,
+        right=0.80,
+        top=0.80,
+        wspace=0.6,  # width
+        hspace=0.5,
+    )
     # plt.rcParams.update({'font.size': 22})
     plt.savefig(fp, dpi=300)
 
-    if sys.platform.startswith('linux'):
-        os.system(f'eog {fp}&')
+    if sys.platform.startswith("linux"):
+        os.system(f"eog {fp}&")
     else:
-        os.system(f'open {fp}')
+        os.system(f"open {fp}")
 
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
+
 
 class FixtureFactory:
-    NAME = ''
+    NAME = ""
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
@@ -216,7 +230,7 @@ class FixtureFactory:
 
 
 class FFInt(FixtureFactory):
-    NAME = 'int64'
+    NAME = "int64"
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
@@ -224,8 +238,9 @@ class FFInt(FixtureFactory):
         array.flags.writeable = False
         return array
 
+
 class FFFloat(FixtureFactory):
-    NAME = 'float64'
+    NAME = "float64"
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
@@ -233,8 +248,9 @@ class FFFloat(FixtureFactory):
         array.flags.writeable = False
         return array
 
+
 class FFString(FixtureFactory):
-    NAME = 'string'
+    NAME = "string"
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
@@ -242,8 +258,9 @@ class FFString(FixtureFactory):
         array.flags.writeable = False
         return array
 
+
 class FFObject(FixtureFactory):
-    NAME = 'object'
+    NAME = "object"
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
@@ -260,27 +277,23 @@ class FFObject(FixtureFactory):
         return array
 
 
-
-
 def get_versions() -> str:
     import platform
-    return f'OS: {platform.system()} / AutoMap / NumPy: {np.__version__}\n'
+
+    return f"OS: {platform.system()} / AutoMap / NumPy: {np.__version__}\n"
 
 
 CLS_PROCESSOR = (
     FAMLInstantiate,
     FAMLLookup,
     FAMLItems,
-
     FAMAInstantiate,
     FAMALookup,
     FAMAItems,
-
     DictInstantiate,
     DictLookup,
     DictItems,
-
-    )
+)
 
 CLS_FF = (
     FFInt,
@@ -288,6 +301,7 @@ CLS_FF = (
     FFString,
     FFObject,
 )
+
 
 def run_test():
     records = []
@@ -300,10 +314,7 @@ def run_test():
                 record = [cls, NUMBER, fixture_label, size]
                 print(record)
                 try:
-                    result = timeit.timeit(
-                            f'runner()',
-                            globals=locals(),
-                            number=NUMBER)
+                    result = timeit.timeit(f"runner()", globals=locals(), number=NUMBER)
                 except OSError:
                     result = np.nan
                 finally:
@@ -311,15 +322,13 @@ def run_test():
                 record.append(result)
                 records.append(record)
 
-    f = pd.DataFrame.from_records(records,
-            columns=('cls_processor', 'number', 'fixture', 'size', 'time')
-            )
+    f = pd.DataFrame.from_records(
+        records, columns=("cls_processor", "number", "fixture", "size", "time")
+    )
     print(f)
     plot_performance(f)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
 
     run_test()
-
-
-
