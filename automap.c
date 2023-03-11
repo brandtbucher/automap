@@ -840,6 +840,7 @@ fam_hash(FAMObject *self)
 {
     Py_hash_t hash = 0;
     for (Py_ssize_t i = 0; i < self->table_size; i++) {
+        // REVIEW: should the -1 hash check be here?
         hash = hash * 3 + self->table[i].hash;
     }
     if (hash == -1) {
