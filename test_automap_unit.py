@@ -1,0 +1,26 @@
+import typing
+import pytest
+import numpy as np
+
+# from automap import AutoMap
+from automap import FrozenAutoMap
+
+# from automap import NonUniqueError
+
+
+def test_contains():
+    x = []
+    fam = FrozenAutoMap(("a", "b", "c"))
+    assert (x in fam.values()) == False
+    # NOTE: exercise x to force seg fault
+    assert len(x) == 0
+
+
+def test_constructor_array_a():
+    a1 = np.array((10, 20, 30))
+    with pytest.raises(TypeError):
+        fam = FrozenAutoMap(a1)
+
+    a1.flags.writeable = False
+
+    # fam = FrozenAutoMap(a1)

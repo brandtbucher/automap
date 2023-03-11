@@ -928,11 +928,13 @@ static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
     const char *name = cls->tp_name;
+
     if (kwargs) {
         PyErr_Format(PyExc_TypeError, "%s takes no keyword arguments", name);
         return NULL;
     }
 
+    // NOTE: can add an own_keys Boolean as second position arg with default False value; this will permit owning a list that we can mutate in a AM
     PyObject *keys = NULL;
     if (!PyArg_UnpackTuple(args, name, 0, 1, &keys)) {
         return NULL;
@@ -944,11 +946,16 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     else if (PyObject_TypeCheck(keys, &FAMType)) {
         return (PyObject *)copy(cls, (FAMObject *)keys);
     }
-    else if (PyArray_Check(O)) {
-        PyErr_Format(PyExc_TypeError, "%s got an array", name);
+    else if (PyArray_Check(keys)) {
+        if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
+            PyErr_Format(PyExc_TypeError, "Arrays must be immutable");
+            return NULL;
+        }
+
+        PyErr_Format(PyExc_TypeError, "Not Yet implemented");
         return NULL;
     }
-    else {
+    else { // assume an arbitrary iterable
         keys = PySequence_List(keys);
     }
 
@@ -1013,6 +1020,7 @@ static PyMethodDef fam_methods[] = {
     {NULL},
 };
 
+
 static PyTypeObject FAMType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_as_mapping = &fam_as_mapping,
@@ -1029,7 +1037,6 @@ static PyTypeObject FAMType = {
     .tp_repr = (reprfunc) fam_repr,
     .tp_richcompare = (richcmpfunc) fam_richcompare,
 };
-
 
 
 //------------------------------------------------------------------------------

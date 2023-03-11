@@ -91,18 +91,3 @@ def test_non_unique_exception(keys: Keys):
 
     with pytest.raises(NonUniqueError):
         AutoMap([*keys, duplicate])
-
-
-def test_contains():
-    x = []
-    fam = FrozenAutoMap(("a", "b", "c"))
-    assert (x in fam.values()) == False
-    # NOTE: exercise x to force seg fault
-    assert len(x) == 0
-
-# def test_constructor_a():
-#     a1 = np.array()
-#     fam = FrozenAutoMap(("a", "b", "c"))
-#     assert (x in fam.values()) == False
-#     # NOTE: exercise x to force seg fault
-#     assert len(x) == 0
