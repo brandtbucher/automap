@@ -120,16 +120,16 @@ really gives us our awesome performance.
 # include "numpy/arrayobject.h"
 # include "numpy/arrayscalars.h"
 
-// PyPy doesn't define Py_UNREACHABLE():
+// # ifndef Py_UNREACHABLE
+// # define Py_UNREACHABLE() Py_FatalError("https://xkcd.com/2200")
+// # endif
 
-# ifndef Py_UNREACHABLE
-# define Py_UNREACHABLE() Py_FatalError("https://xkcd.com/2200")
-# endif
-
-// Experimentation shows that these values work well:
-
-# define LOAD 0.9
-# define SCAN 16
+# define DEBUG_MSG_OBJ(msg, obj)     \
+    fprintf(stderr, "--- %s: %i: %s: ", __FILE__, __LINE__, __FUNCTION__); \
+    fprintf(stderr, #msg " ");      \
+    PyObject_Print(obj, stderr, 0); \
+    fprintf(stderr, "\n"); \
+    fflush(stderr);        \
 
 //------------------------------------------------------------------------------
 // Common
@@ -146,6 +146,11 @@ typedef struct {
     Py_ssize_t keys_pos;
     Py_hash_t hash;
 } TableElement;
+
+// Table configuration; experimentation shows that these values work well:
+# define LOAD 0.9
+# define SCAN 16
+
 
 // could store all Table components together, but would need to dynamically alloc the full struct
 // typedef struct {
@@ -171,11 +176,11 @@ typedef enum {
 // the global int_cache is shared among all instances
 
 static PyObject *int_cache = NULL;
-static Py_ssize_t int_cache_count = 0;
+static Py_ssize_t key_count_global = 0;
 
-// Fill the int_cache up to size with PyObject ints.
+// Fill the int_cache up to size_needed with PyObject ints; `size` is not the key_count_global.
 static int
-int_cache_fill(Py_ssize_t size)
+int_cache_fill(Py_ssize_t size_needed)
 {
     PyObject *item;
     if (!int_cache) {
@@ -184,8 +189,8 @@ int_cache_fill(Py_ssize_t size)
             return -1;
         }
     }
-    for (Py_ssize_t index = PyList_GET_SIZE(int_cache); index < size; index++) {
-        item = PyLong_FromSsize_t(index);
+    for (Py_ssize_t i = PyList_GET_SIZE(int_cache); i < size_needed; i++) {
+        item = PyLong_FromSsize_t(i);
         if (!item) {
             return -1;
         }
@@ -195,20 +200,33 @@ int_cache_fill(Py_ssize_t size)
         }
         Py_DECREF(item);
     }
+
+    // Py_ssize_t ics = PyList_GET_SIZE(int_cache);
+    // PyObject* icso = PyLong_FromSsize_t(ics);
+    // DEBUG_MSG_OBJ("int_cache_fill()", icso);
+    // Py_DECREF(icso);
+
     return 0;
 }
 
-// Conform the size of the int_cache to the requested size
+// Given the current key_count_global, remove cache elements only if the key_count is less than the the current size of the int_cache.
 void
-int_cache_remove(Py_ssize_t size)
+int_cache_remove(Py_ssize_t key_count)
 {
-    if (!size) {
+    if (!key_count) {
         Py_CLEAR(int_cache);
     }
-    else if (size < PyList_GET_SIZE(int_cache)) {
-        // del int_cache[size:]
-        PyList_SetSlice(int_cache, size, PyList_GET_SIZE(int_cache), NULL);
+    else if (key_count < PyList_GET_SIZE(int_cache)) {
+        // del int_cache[key_count:]
+        PyList_SetSlice(int_cache, key_count, PyList_GET_SIZE(int_cache), NULL);
     }
+
+    // if (int_cache) {
+    //     Py_ssize_t ics = PyList_GET_SIZE(int_cache);
+    //     PyObject* icso = PyLong_FromSsize_t(ics);
+    //     DEBUG_MSG_OBJ("int_cache_remove()", icso);
+    //     Py_DECREF(icso);
+    // }
 }
 
 
@@ -582,23 +600,26 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
 }
 
 
-// Returns 0 on succes, -1 on failure.
+// Called in fam_new(), extend(), append(), with the size of observed keys. This keeps the table at the max size of all observed keys. Returns 0 on success, -1 on failure.
 static int
-grow_table(FAMObject *self, Py_ssize_t needed)
+grow_table(FAMObject *self, Py_ssize_t keys_size)
 {
-    if (int_cache_fill(needed)) {
+    // NOTE: this is the only place int_cache_fill is called; it is not called with key_count_global, but with the max value neede
+    if (int_cache_fill(keys_size)) {
         return -1;
     }
+    Py_ssize_t keys_load = keys_size / LOAD;
     Py_ssize_t size_old = self->table_size;
-    Py_ssize_t size_new = 1;
-    needed /= LOAD;
-
-    while (size_new <= needed) {
-        size_new <<= 1;
-    }
-    if (size_new <= size_old) {
+    if (keys_load < size_old) {
         return 0;
     }
+
+    // get the next power of 2 greater than current keys_load
+    Py_ssize_t size_new = 1;
+    while (size_new <= keys_load) {
+        size_new <<= 1;
+    }
+    // size_new > keys_load; we know that keys_load >= size_old, so size_new must be > size_old
 
     TableElement *table_old = self->table;
     TableElement *table_new = PyMem_New(TableElement, size_new + SCAN - 1);
@@ -652,7 +673,8 @@ copy(PyTypeObject *cls, FAMObject *self)
         Py_DECREF(keys);
         return NULL;
     }
-    int_cache_count += PyList_GET_SIZE(keys);
+    // NOTE: must update key_count_global as we are not calling fam_new()
+    key_count_global += PyList_GET_SIZE(keys);
     new->keys = keys;
     new->table_size = self->table_size;
 
@@ -670,12 +692,13 @@ copy(PyTypeObject *cls, FAMObject *self)
 static int
 extend(FAMObject *self, PyObject *keys)
 {
+    // this should fail for self->keys types that are not a list
     keys = PySequence_Fast(keys, "expected an iterable of keys");
     if (!keys) {
         return -1;
     }
     Py_ssize_t size_extend = PySequence_Fast_GET_SIZE(keys);
-    int_cache_count += size_extend;
+    key_count_global += size_extend;
 
     if (grow_table(self, PyList_GET_SIZE(self->keys) + size_extend)) {
         Py_DECREF(keys);
@@ -684,6 +707,7 @@ extend(FAMObject *self, PyObject *keys)
     PyObject **keys_array = PySequence_Fast_ITEMS(keys);
 
     for (Py_ssize_t index = 0; index < size_extend; index++) {
+        // get the new keys_size after each append
         if (insert(self, keys_array[index], PyList_GET_SIZE(self->keys), -1) ||
             PyList_Append(self->keys, keys_array[index]))
         {
@@ -699,11 +723,13 @@ extend(FAMObject *self, PyObject *keys)
 static int
 append(FAMObject *self, PyObject *key)
 {
-    int_cache_count++;
-    if (grow_table(self, PyList_GET_SIZE(self->keys) + 1)) {
+    key_count_global++;
+    Py_ssize_t keys_size = PyList_GET_SIZE(self->keys);
+
+    if (grow_table(self, keys_size + 1)) {
         return -1;
     }
-    if (insert(self, key, PyList_GET_SIZE(self->keys), -1) ||
+    if (insert(self, key, keys_size, -1) ||
         PyList_Append(self->keys, key))
     {
         return -1;
@@ -801,10 +827,10 @@ static void
 fam_dealloc(FAMObject *self)
 {
     PyMem_Del(self->table);
-    int_cache_count -= PyList_GET_SIZE(self->keys);
+    key_count_global -= PyList_GET_SIZE(self->keys);
     Py_DECREF(self->keys);
     Py_TYPE(self)->tp_free((PyObject *)self);
-    int_cache_remove(int_cache_count);
+    int_cache_remove(key_count_global);
 }
 
 
@@ -932,13 +958,20 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     }
 
     self->keys = keys;
-    int_cache_count += PyList_GET_SIZE(keys);
-    if (grow_table(self, PyList_GET_SIZE(keys))) {
+    Py_ssize_t keys_size = PyList_GET_SIZE(keys);
+    key_count_global += keys_size;
+
+    // PyObject* icc = PyLong_FromSsize_t(key_count_global);
+    // DEBUG_MSG_OBJ("key_count_global", icc);
+    // Py_DECREF(icc);
+
+    if (grow_table(self, keys_size)) {
         Py_DECREF(self);
         return NULL;
     }
-    for (Py_ssize_t index = 0; index < PyList_GET_SIZE(keys); index++) {
-        if (insert(self, PyList_GET_ITEM(self->keys, index), index, -1)) {
+    for (Py_ssize_t i = 0; i < keys_size; i++) {
+        // getting an item from keys can be specialized based on key type
+        if (insert(self, PyList_GET_ITEM(self->keys, i), i, -1)) {
             Py_DECREF(self);
             return NULL;
         }
