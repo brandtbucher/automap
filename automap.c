@@ -944,6 +944,10 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     else if (PyObject_TypeCheck(keys, &FAMType)) {
         return (PyObject *)copy(cls, (FAMObject *)keys);
     }
+    else if (PyArray_Check(O)) {
+        PyErr_Format(PyExc_TypeError, "%s got an array", name);
+        return NULL;
+    }
     else {
         keys = PySequence_List(keys);
     }
