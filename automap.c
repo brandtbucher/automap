@@ -147,6 +147,7 @@ typedef struct {
     Py_hash_t hash;
 } TableElement;
 
+
 // Table configuration; experimentation shows that these values work well:
 # define LOAD 0.9
 # define SCAN 16
@@ -158,12 +159,28 @@ typedef struct {
 //     Py_ssize_t table_size;
 // } HashTable;
 
+typedef enum {
+    ARRAY_b,
+    ARRAY_i, // signed int
+    ARRAY_u, // unsigned int
+    ARRAY_f,
+    ARRAY_c,
+    ARRAY_M, // datetime
+    ARRAY_O,
+    ARRAY_S, // bytes
+    ARRAY_U, // unicode
+    LIST,    // permit mutating in place, only not array
+} KeysKind;
+
+
 typedef struct {
     PyObject_VAR_HEAD
     Py_ssize_t table_size;
     TableElement *table;    // an array of TableElement structs
-    PyObject *keys;  // I want this to be an immutable NumPy array
+    PyObject *keys;
+    KeysKind keys_kind;
 } FAMObject;
+
 
 typedef enum {
     ITEMS,
@@ -664,10 +681,12 @@ copy(PyTypeObject *cls, FAMObject *self)
         Py_INCREF(self);
         return self;
     }
+    // NOTE: branch on keys_kind
     PyObject *keys = PySequence_List(self->keys);
     if (!keys) {
         return NULL;
     }
+
     FAMObject *new = (FAMObject *)cls->tp_alloc(cls, 0);
     if (!new) {
         Py_DECREF(keys);
@@ -677,6 +696,7 @@ copy(PyTypeObject *cls, FAMObject *self)
     key_count_global += PyList_GET_SIZE(keys);
     new->keys = keys;
     new->table_size = self->table_size;
+    new->keys_kind = self->keys_kind;
 
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
     new->table = PyMem_New(TableElement, table_size_alloc);
@@ -940,6 +960,8 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
+    KeysKind keys_kind = LIST;
+
     if (!keys) {
         keys = PyList_New(0);
     }
@@ -951,13 +973,14 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             PyErr_Format(PyExc_TypeError, "Arrays must be immutable");
             return NULL;
         }
-
+        // set keys_kind based on dtype
         PyErr_Format(PyExc_TypeError, "Not Yet implemented");
         return NULL;
     }
     else { // assume an arbitrary iterable
         keys = PySequence_List(keys);
     }
+
 
     if (!keys) {
         return NULL;
@@ -970,6 +993,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     }
 
     self->keys = keys;
+    self->keys_kind = keys_kind;
     Py_ssize_t keys_size = PyList_GET_SIZE(keys);
     key_count_global += keys_size;
 
