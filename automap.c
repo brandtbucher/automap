@@ -807,8 +807,8 @@ fam_length(FAMObject *self)
 // Given a key for a FAM, return the Python integer (via the int_cache) associated with that key. Utility function used in both fam_subscript() and fam_get()
 static PyObject *
 get(FAMObject *self, PyObject *key, PyObject *missing) {
-    Py_ssize_t result = lookup(self, key);
-    if (result < 0) {
+    Py_ssize_t keys_pos = lookup(self, key);
+    if (keys_pos < 0) {
         if (PyErr_Occurred()) {
             return NULL;
         }
@@ -820,7 +820,7 @@ get(FAMObject *self, PyObject *key, PyObject *missing) {
         return NULL;
     }
     // use a C-integer to fetch the Python integer
-    PyObject *index = PyList_GET_ITEM(int_cache, result);
+    PyObject *index = PyList_GET_ITEM(int_cache, keys_pos);
     Py_INCREF(index);
     return index;
 }
@@ -886,7 +886,11 @@ static void
 fam_dealloc(FAMObject *self)
 {
     PyMem_Del(self->table);
-    key_count_global -= PyList_GET_SIZE(self->keys);
+
+    key_count_global -= self->keys_kind
+        ? PyArray_SIZE((PyArrayObject *)self->keys)
+        : PyList_GET_SIZE(self->keys);
+
     Py_DECREF(self->keys);
     Py_TYPE(self)->tp_free((PyObject *)self);
     int_cache_remove(key_count_global);

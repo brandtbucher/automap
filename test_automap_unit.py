@@ -48,3 +48,11 @@ def test_fam_array_len():
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
     assert len(fam) == 4
+
+
+def test_fam_array_len():
+    a1 = np.array((10, 20, 30, 40))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    # assert fam[20] == 1
