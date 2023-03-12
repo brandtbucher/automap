@@ -797,6 +797,9 @@ append(FAMObject *self, PyObject *key)
 static Py_ssize_t
 fam_length(FAMObject *self)
 {
+    if (self->keys_kind) {
+        return PyArray_SIZE((PyArrayObject *)self->keys);
+    }
     return PyList_GET_SIZE(self->keys);
 }
 
