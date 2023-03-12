@@ -41,3 +41,10 @@ def test_constructor_array_b():
     a1.flags.writeable = False
     with pytest.raises(TypeError):
         fam = FrozenAutoMap(a1)
+
+
+def test_fam_array_len():
+    a1 = np.array((10, 20, 30, 40))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert len(fam) == 4
