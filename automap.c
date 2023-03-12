@@ -715,6 +715,10 @@ copy(PyTypeObject *cls, FAMObject *self)
 static int
 extend(FAMObject *self, PyObject *keys)
 {
+    if (self->keys_kind == ARRAY) {
+        PyErr_SetString(PyExc_NotImplementedError, "Not supported for array keys");
+        return NULL;
+    }
     // this should fail for self->keys types that are not a list
     keys = PySequence_Fast(keys, "expected an iterable of keys");
     if (!keys) {
@@ -746,6 +750,10 @@ extend(FAMObject *self, PyObject *keys)
 static int
 append(FAMObject *self, PyObject *key)
 {
+    if (self->keys_kind == ARRAY) {
+        PyErr_SetString(PyExc_NotImplementedError, "Not supported for array keys");
+        return NULL;
+    }
     key_count_global++;
     Py_ssize_t keys_size = PyList_GET_SIZE(self->keys);
 
@@ -973,16 +981,16 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     }
     else if (PyArray_Check(keys)) {
         if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
-            PyErr_Format(PyExc_TypeError, "Arrays must be immutable");
+            PyErr_SetString(PyExc_TypeError, "Arrays must be immutable");
             return NULL;
         }
         if (PyArray_NDIM((PyArrayObject *)keys) != 1) {
-            PyErr_Format(PyExc_TypeError, "Arrays must be 1-dimensional");
+            PyErr_SetString(PyExc_TypeError, "Arrays must be 1-dimensional");
             return NULL;
         }
         keys_kind = ARRAY;
         // set keys_kind based on dtype
-        PyErr_Format(PyExc_TypeError, "Not Yet implemented");
+        PyErr_SetString(PyExc_NotImplementedError, "Not Yet implemented");
         return NULL;
     }
     else { // assume an arbitrary iterable
