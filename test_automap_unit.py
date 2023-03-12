@@ -2,10 +2,16 @@ import typing
 import pytest
 import numpy as np
 
-# from automap import AutoMap
+from automap import AutoMap
 from automap import FrozenAutoMap
 
 # from automap import NonUniqueError
+
+
+def test_am_extend():
+    am1 = AutoMap(("a", "b"))
+    am2 = am1 | AutoMap(("c", "d"))
+    assert list(am2.keys()) == ["a", "b", "c", "d"]
 
 
 def test_contains():

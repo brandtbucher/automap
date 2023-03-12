@@ -621,7 +621,7 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
 }
 
 
-// Called in fam_new(), extend(), append(), with the size of observed keys. This keeps the table at the max size of all observed keys. Returns 0 on success, -1 on failure.
+// Called in fam_new(), extend(), append(), with the size of observed keys. This table is updated only when append or extending. Only if there is an old table will keys be accessed Returns 0 on success, -1 on failure.
 static int
 grow_table(FAMObject *self, Py_ssize_t keys_size)
 {
@@ -658,7 +658,12 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
 
     // if we have an old table, move them into the new table
     if (size_old) {
+        PyObject *v = NULL;
+        Py_ssize_t i;
+        Py_hash_t h;
+
         for (table_pos = 0; table_pos < size_old + SCAN - 1; table_pos++) {
+
             if ((table_old[table_pos].hash != -1) &&
                 insert(self,
                         PyList_GET_ITEM(self->keys, table_old[table_pos].keys_pos),
@@ -671,6 +676,26 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
                 self->table_size = size_old;
                 return -1;
             }
+
+            // i = table_old[table_pos].keys_pos;
+            // h = table_old[table_pos].hash;
+
+            // if (self->keys_kind) {
+            //     PyArrayObject *a = (PyArrayObject *)self->keys;
+            //     v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
+            // }
+            // else {
+            //     v = PyList_GET_ITEM(self->keys, i);
+            // }
+
+            // if ((h != -1) && insert(self, v, i, h)) {
+            //     // on error, delete the new table and re-assign the old
+            //     PyMem_Del(self->table);
+            //     self->table = table_old;
+            //     self->table_size = size_old;
+            //     return -1;
+            // }
+
         }
     }
     PyMem_Del(table_old);
@@ -1034,7 +1059,6 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         else {
             v = PyList_GET_ITEM(self->keys, i);
         }
-
         if (insert(self, v, i, -1)) {
             Py_DECREF(self);
             return NULL;
