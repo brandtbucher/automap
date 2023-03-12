@@ -14,6 +14,14 @@ def test_am_extend():
     assert list(am2.keys()) == ["a", "b", "c", "d"]
 
 
+def test_am_add():
+    a = AutoMap()
+    for l, key in enumerate(["a", "b", "c", "d"]):
+        assert a.add(key) is None
+        assert len(a) == l + 1
+        assert a[key] == l
+
+
 def test_contains():
     x = []
     fam = FrozenAutoMap(("a", "b", "c"))

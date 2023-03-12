@@ -658,49 +658,48 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
 
     // if we have an old table, move them into the new table
     if (size_old) {
-        PyObject *v = NULL;
+
+        if (self->keys_kind == ARRAY) {
+            PyErr_SetString(PyExc_NotImplementedError, "Cannot grow table for array keys");
+            return -1;
+        }
+
         Py_ssize_t i;
         Py_hash_t h;
 
         for (table_pos = 0; table_pos < size_old + SCAN - 1; table_pos++) {
             i = table_old[table_pos].keys_pos;
             h = table_old[table_pos].hash;
+            // NOTE: cannot do this without segfault
             // v = PyList_GET_ITEM(self->keys, i);
-            if ((h != -1) &&
-                insert(self,
-                        PyList_GET_ITEM(self->keys, i),
-                        i,
-                        h))
+            if ((h != -1) && insert(self, PyList_GET_ITEM(self->keys, i), i, h))
             {
-                // on error, delete the new table and re-assign the old
                 PyMem_Del(self->table);
                 self->table = table_old;
                 self->table_size = size_old;
                 return -1;
             }
-
-
-            // if (self->keys_kind) {
-            //     PyArrayObject *a = (PyArrayObject *)self->keys;
-            //     v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
-            // }
-            // else {
-            //     v = PyList_GET_ITEM(self->keys, i);
-            // }
-
-            // if ((h != -1) && insert(self, v, i, h)) {
-            //     // on error, delete the new table and re-assign the old
-            //     PyMem_Del(self->table);
-            //     self->table = table_old;
-            //     self->table_size = size_old;
-            //     return -1;
-            // }
-
         }
     }
     PyMem_Del(table_old);
     return 0;
 }
+
+        // if (self->keys_kind) {
+        //     PyArrayObject *a = (PyArrayObject *)self->keys;
+        //     v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
+        // }
+        // else {
+        //     v = PyList_GET_ITEM(self->keys, i);
+        // }
+
+        // if ((h != -1) && insert(self, v, i, h)) {
+        //     // on error, delete the new table and re-assign the old
+        //     PyMem_Del(self->table);
+        //     self->table = table_old;
+        //     self->table_size = size_old;
+        //     return -1;
+        // }
 
 
 static FAMObject *
