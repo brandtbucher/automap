@@ -663,12 +663,14 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
         Py_hash_t h;
 
         for (table_pos = 0; table_pos < size_old + SCAN - 1; table_pos++) {
-
-            if ((table_old[table_pos].hash != -1) &&
+            i = table_old[table_pos].keys_pos;
+            h = table_old[table_pos].hash;
+            // v = PyList_GET_ITEM(self->keys, i);
+            if ((h != -1) &&
                 insert(self,
-                        PyList_GET_ITEM(self->keys, table_old[table_pos].keys_pos),
-                        table_old[table_pos].keys_pos,
-                        table_old[table_pos].hash))
+                        PyList_GET_ITEM(self->keys, i),
+                        i,
+                        h))
             {
                 // on error, delete the new table and re-assign the old
                 PyMem_Del(self->table);
@@ -677,8 +679,6 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
                 return -1;
             }
 
-            // i = table_old[table_pos].keys_pos;
-            // h = table_old[table_pos].hash;
 
             // if (self->keys_kind) {
             //     PyArrayObject *a = (PyArrayObject *)self->keys;
