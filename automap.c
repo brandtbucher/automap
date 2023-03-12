@@ -170,9 +170,10 @@ typedef struct {
 // ARRAY_O,
 // ARRAY_S, // bytes
 // ARRAY_U, // unicode
+
 typedef enum {
-    LIST,
-    ARRAY,
+    LIST = 0,
+    ARRAY = 1, // make arrays truthy
 } KeysKind;
 
 
@@ -711,13 +712,13 @@ copy(PyTypeObject *cls, FAMObject *self)
     return new;
 }
 
-
+// Returns -1 on error, 0 on success.
 static int
 extend(FAMObject *self, PyObject *keys)
 {
     if (self->keys_kind == ARRAY) {
         PyErr_SetString(PyExc_NotImplementedError, "Not supported for array keys");
-        return NULL;
+        return -1;
     }
     // this should fail for self->keys types that are not a list
     keys = PySequence_Fast(keys, "expected an iterable of keys");
@@ -746,13 +747,13 @@ extend(FAMObject *self, PyObject *keys)
     return 0;
 }
 
-
+// Returns -1 on error, 0 on success.
 static int
 append(FAMObject *self, PyObject *key)
 {
     if (self->keys_kind == ARRAY) {
         PyErr_SetString(PyExc_NotImplementedError, "Not supported for array keys");
-        return NULL;
+        return -1;
     }
     key_count_global++;
     Py_ssize_t keys_size = PyList_GET_SIZE(self->keys);
@@ -965,7 +966,6 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    // NOTE: can add an own_keys Boolean as second position arg with default False value; this will permit owning a list that we can mutate in a AM
     PyObject *keys = NULL;
     if (!PyArg_UnpackTuple(args, name, 0, 1, &keys)) {
         return NULL;
@@ -989,9 +989,8 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             return NULL;
         }
         keys_kind = ARRAY;
-        // set keys_kind based on dtype
-        PyErr_SetString(PyExc_NotImplementedError, "Not Yet implemented");
-        return NULL;
+        // REVIEW: do we need to incref? if not, we need conditionally decref below
+        Py_INCREF(keys);
     }
     else { // assume an arbitrary iterable
         keys = PySequence_List(keys);
@@ -1009,20 +1008,26 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 
     self->keys = keys;
     self->keys_kind = keys_kind;
-    Py_ssize_t keys_size = PyList_GET_SIZE(keys);
+
+    Py_ssize_t keys_size = keys_kind
+        ? PyArray_SIZE((PyArrayObject *)keys)
+        : PyList_GET_SIZE(keys);
+
     key_count_global += keys_size;
 
     // PyObject* icc = PyLong_FromSsize_t(key_count_global);
     // DEBUG_MSG_OBJ("key_count_global", icc);
     // Py_DECREF(icc);
 
+    // NOTE: this does iterate and insert keys
     if (grow_table(self, keys_size)) {
         Py_DECREF(self);
         return NULL;
     }
     for (Py_ssize_t i = 0; i < keys_size; i++) {
         // getting an item from keys can be specialized based on key type
-        if (insert(self, PyList_GET_ITEM(self->keys, i), i, -1)) {
+        PyObject *v = PyList_GET_ITEM(self->keys, i);
+        if (insert(self, v, i, -1)) {
             Py_DECREF(self);
             return NULL;
         }
