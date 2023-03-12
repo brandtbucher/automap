@@ -973,6 +973,10 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             PyErr_Format(PyExc_TypeError, "Arrays must be immutable");
             return NULL;
         }
+        if (PyArray_NDIM((PyArrayObject *)keys) != 1) {
+            PyErr_Format(PyExc_TypeError, "Arrays must be 1-dimensional");
+            return NULL;
+        }
         // set keys_kind based on dtype
         PyErr_Format(PyExc_TypeError, "Not Yet implemented");
         return NULL;
