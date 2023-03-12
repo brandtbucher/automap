@@ -159,17 +159,20 @@ typedef struct {
 //     Py_ssize_t table_size;
 // } HashTable;
 
+
+// could record dtype kind to possibly screen out object types from comparisions with a isinstnace checks... though that might be more coslty then doing the comparison
+// ARRAY_b,
+// ARRAY_i, // signed int
+// ARRAY_u, // unsigned int
+// ARRAY_f,
+// ARRAY_c,
+// ARRAY_M, // datetime
+// ARRAY_O,
+// ARRAY_S, // bytes
+// ARRAY_U, // unicode
 typedef enum {
-    ARRAY_b,
-    ARRAY_i, // signed int
-    ARRAY_u, // unsigned int
-    ARRAY_f,
-    ARRAY_c,
-    ARRAY_M, // datetime
-    ARRAY_O,
-    ARRAY_S, // bytes
-    ARRAY_U, // unicode
-    LIST,    // permit mutating in place, only not array
+    LIST,
+    ARRAY,
 } KeysKind;
 
 
@@ -977,6 +980,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             PyErr_Format(PyExc_TypeError, "Arrays must be 1-dimensional");
             return NULL;
         }
+        keys_kind = ARRAY;
         // set keys_kind based on dtype
         PyErr_Format(PyExc_TypeError, "Not Yet implemented");
         return NULL;
@@ -984,7 +988,6 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     else { // assume an arbitrary iterable
         keys = PySequence_List(keys);
     }
-
 
     if (!keys) {
         return NULL;
