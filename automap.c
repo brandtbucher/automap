@@ -1026,7 +1026,15 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     }
     for (Py_ssize_t i = 0; i < keys_size; i++) {
         // getting an item from keys can be specialized based on key type
-        PyObject *v = PyList_GET_ITEM(self->keys, i);
+        PyObject *v;
+        if (keys_kind) {
+            PyArrayObject *a = (PyArrayObject *)self->keys;
+            v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
+        }
+        else {
+            v = PyList_GET_ITEM(self->keys, i);
+        }
+
         if (insert(self, v, i, -1)) {
             Py_DECREF(self);
             return NULL;
