@@ -90,3 +90,26 @@ def test_fam_array_items_a():
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
     assert list(fam.items()) == [(10, 0), (20, 1), (30, 2), (40, 3)]
+
+
+def test_fam_array_values_b():
+    a1 = np.array(('a', 'b', 'c', 'd'))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert list(fam.values()) == [0, 1, 2, 3]
+
+
+def test_fam_array_keys_b():
+    a1 = np.array(('a', 'b', 'c', 'd'))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert list(fam.keys()) == ['a', 'b', 'c', 'd']
+
+
+def test_fam_array_items_b():
+    a1 = np.array(('a', 'b', 'c', 'd'))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert list(fam.items()) == [('a', 0), ('b', 1), ('c', 2), ('d', 3)]
+
+
