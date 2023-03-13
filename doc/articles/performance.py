@@ -46,6 +46,15 @@ class FAMAInstantiate(MapProcessor):
         assert len(fam) == len(self.list)
 
 
+class FAMAtolistInstantiate(MapProcessor):
+    NAME = "FAM(Atolist), instantiate"
+    SORT = 0
+
+    def __call__(self):
+        fam = FrozenAutoMap(self.array.tolist())
+        assert len(fam) == len(self.list)
+
+
 class DictInstantiate(MapProcessor):
     NAME = "Dict, instantiate"
     SORT = 0
@@ -129,7 +138,7 @@ def seconds_to_display(seconds: float) -> str:
     return f"{seconds: .1f} (s)"
 
 
-GROUPS = 3
+GROUPS = 4
 
 
 def plot_performance(frame):
@@ -141,11 +150,13 @@ def plot_performance(frame):
     # cmap = plt.get_cmap('terrain')
 
     cmap = plt.get_cmap("plasma")
-    color_raw = cmap(np.arange(processor_total) / processor_total)
-    color = []
-    for i in range(GROUPS):
-        for j in range(0, processor_total, GROUPS):
-            color.append(color_raw[i + j])
+    color = cmap(np.arange(processor_total) / processor_total)
+    # color = []
+    # for i in range(GROUPS):
+    #     for j in range(0, processor_total, GROUPS):
+    #         k = i + j
+    #         if k < len(color_raw):
+    #             color.append(color_raw[i + j])
 
     # category is the size of the array
     for cat_count, (cat_label, cat) in enumerate(frame.groupby("size")):
@@ -285,13 +296,14 @@ def get_versions() -> str:
 
 CLS_PROCESSOR = (
     FAMLInstantiate,
-    FAMLLookup,
-    FAMLItems,
     FAMAInstantiate,
-    FAMALookup,
-    FAMAItems,
+    FAMAtolistInstantiate,
     DictInstantiate,
+    FAMLLookup,
+    FAMALookup,
     DictLookup,
+    FAMLItems,
+    FAMAItems,
     DictItems,
 )
 
@@ -305,7 +317,7 @@ CLS_FF = (
 
 def run_test():
     records = []
-    for size in (1_000, 10_000, 100_000):
+    for size in (1_000, 100_000, 1_000_000):
         for ff in CLS_FF:
             fixture_label, fixture = ff.get_label_array(size)
             for cls in CLS_PROCESSOR:
