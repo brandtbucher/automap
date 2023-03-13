@@ -740,8 +740,13 @@ copy(PyTypeObject *cls, FAMObject *self)
     // NOTE: branch on keys_kind
     PyObject *keys = NULL;
     if (self->keys_kind) {
-        PyErr_SetString(PyExc_NotImplementedError, "");
-        return NULL;
+        // do not need to do a deep copy as immmutable
+        // if ((keys = PyArray_NewCopy((PyArrayObject *)self->keys, NPY_ANYORDER))) {
+        //     PyArray_CLEARFLAGS((PyArrayObject *)keys, NPY_ARRAY_WRITEABLE);
+        // }
+        keys = self->keys;
+        // assume we do not need to incref as fam_new does
+        // Py_INCREF(keys);
     }
     else {
         keys = PySequence_List(self->keys);
