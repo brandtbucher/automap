@@ -183,6 +183,7 @@ typedef struct {
     TableElement *table;    // an array of TableElement structs
     PyObject *keys;
     KeysKind keys_kind;
+    Py_ssize_t keys_size;
 } FAMObject;
 
 
@@ -285,7 +286,7 @@ fami_iternext(FAMIObject *self)
 {
     Py_ssize_t index;
     if (self->reversed) {
-        index = PyList_GET_SIZE(self->fam->keys) - ++self->index;
+        index = self->fam->keys_size - ++self->index;
         if (index < 0) {
             return NULL;
         }
@@ -293,21 +294,38 @@ fami_iternext(FAMIObject *self)
     else {
         index = self->index++;
     }
-    if (PyList_GET_SIZE(self->fam->keys) <= index) {
+    if (self->fam->keys_size <= index) {
         return NULL;
     }
     switch (self->kind) {
         case ITEMS: {
-            return PyTuple_Pack(
-                2,
-                PyList_GET_ITEM(self->fam->keys, index),
-                PyList_GET_ITEM(int_cache, index)
-            );
+            if (self->fam->keys_kind) {
+                PyArrayObject *a = (PyArrayObject *)self->fam->keys;
+                // assuming a non-borrowed reference from array
+                return PyTuple_Pack(
+                    2,
+                    PyArray_GETITEM(a, PyArray_GETPTR1(a, index)),
+                    PyList_GET_ITEM(int_cache, index)
+                );
+            }
+            else {
+                return PyTuple_Pack(
+                    2,
+                    PyList_GET_ITEM(self->fam->keys, index),
+                    PyList_GET_ITEM(int_cache, index)
+                );
+            }
         }
         case KEYS: {
-            PyObject *yield = PyList_GET_ITEM(self->fam->keys, index);
-            Py_INCREF(yield);
-            return yield;
+            if (self->fam->keys_kind) {
+                PyArrayObject *a = (PyArrayObject *)self->fam->keys;
+                return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
+            }
+            else {
+                PyObject *yield = PyList_GET_ITEM(self->fam->keys, index);
+                Py_INCREF(yield);
+                return yield;
+            }
         }
         case VALUES: {
             PyObject *yield = PyList_GET_ITEM(int_cache, index);
@@ -322,7 +340,7 @@ fami_iternext(FAMIObject *self)
 static PyObject *
 fami___length_hint__(FAMIObject *self)
 {
-    Py_ssize_t len = Py_MAX(0, PyList_GET_SIZE(self->fam->keys) - self->index);
+    Py_ssize_t len = Py_MAX(0, self->fam->keys_size - self->index);
     return PyLong_FromSsize_t(len);
 }
 
@@ -461,7 +479,7 @@ famv_fami_new(FAMVObject *self)
 static PyObject *
 famv___length_hint__(FAMVObject *self)
 {
-    return PyLong_FromSsize_t(PyList_GET_SIZE(self->fam->keys));
+    return PyLong_FromSsize_t(self->fam->keys_size);
 }
 
 
@@ -543,35 +561,45 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     Py_ssize_t mask = self->table_size - 1;
     Py_hash_t mixin = Py_ABS(hash);
 
-    PyObject **keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
+    PyObject **keys = NULL;
+    if (self->keys_kind == ARRAY) {
+    }
+    else {
+        keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
+    }
     Py_ssize_t table_pos = hash & mask; // taking the modulo
+    PyObject *guess = NULL;
+    PyArrayObject *a = NULL;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             Py_hash_t h = table[table_pos].hash;
-            if (h == -1) {
-                // Miss.
+            if (h == -1) { // Miss.
                 return table_pos;
             }
-            if (h != hash) {
-                // Collision.
+            if (h != hash) { // Collision.
                 table_pos++;
                 continue;
             }
-            PyObject *guess = keys[table[table_pos].keys_pos];
+            if (self->keys_kind) {
+                a = (PyArrayObject *)self->keys;
+                // REVIEW: is this a borrowed or owned ref?
+                guess = PyArray_GETITEM(a,
+                        PyArray_GETPTR1(a, table[table_pos].keys_pos));
+            }
+            else {
+                guess = keys[table[table_pos].keys_pos];
+            }
 
             // try object id compare first
-            if (guess == key) {
-                // Hit.
+            if (guess == key) { // Hit.
                 return table_pos;
             }
             int result = PyObject_RichCompareBool(guess, key, Py_EQ);
-            if (result < 0) {
-                // Error.
+            if (result < 0) { // Error.
                 return -1;
             }
-            if (result) {
-                // Hit.
+            if (result) { // Hit.
                 return table_pos;
             }
             table_pos++;
@@ -701,7 +729,7 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
         //     return -1;
         // }
 
-
+// Create a copy. Returns NULL on error.
 static FAMObject *
 copy(PyTypeObject *cls, FAMObject *self)
 {
@@ -710,9 +738,16 @@ copy(PyTypeObject *cls, FAMObject *self)
         return self;
     }
     // NOTE: branch on keys_kind
-    PyObject *keys = PySequence_List(self->keys);
-    if (!keys) {
+    PyObject *keys = NULL;
+    if (self->keys_kind) {
+        PyErr_SetString(PyExc_NotImplementedError, "");
         return NULL;
+    }
+    else {
+        keys = PySequence_List(self->keys);
+        if (!keys) {
+            return NULL;
+        }
     }
 
     FAMObject *new = (FAMObject *)cls->tp_alloc(cls, 0);
@@ -721,10 +756,12 @@ copy(PyTypeObject *cls, FAMObject *self)
         return NULL;
     }
     // NOTE: must update key_count_global as we are not calling fam_new()
-    key_count_global += PyList_GET_SIZE(keys);
+
+    key_count_global += self->keys_size;
     new->keys = keys;
     new->table_size = self->table_size;
     new->keys_kind = self->keys_kind;
+    new->keys_size = self->keys_size;
 
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
     new->table = PyMem_New(TableElement, table_size_alloc);
@@ -751,11 +788,13 @@ extend(FAMObject *self, PyObject *keys)
     }
     Py_ssize_t size_extend = PySequence_Fast_GET_SIZE(keys);
     key_count_global += size_extend;
+    self->keys_size += size_extend;
 
-    if (grow_table(self, PyList_GET_SIZE(self->keys) + size_extend)) {
+    if (grow_table(self, self->keys_size)) {
         Py_DECREF(keys);
         return -1;
     }
+
     PyObject **keys_array = PySequence_Fast_ITEMS(keys);
 
     for (Py_ssize_t index = 0; index < size_extend; index++) {
@@ -780,12 +819,13 @@ append(FAMObject *self, PyObject *key)
         return -1;
     }
     key_count_global++;
-    Py_ssize_t keys_size = PyList_GET_SIZE(self->keys);
+    self->keys_size++;
 
-    if (grow_table(self, keys_size + 1)) {
+    if (grow_table(self, self->keys_size)) {
         return -1;
     }
-    if (insert(self, key, keys_size, -1) ||
+    // keys_size is already incremented; provide last index
+    if (insert(self, key, self->keys_size - 1, -1) ||
         PyList_Append(self->keys, key))
     {
         return -1;
@@ -797,10 +837,7 @@ append(FAMObject *self, PyObject *key)
 static Py_ssize_t
 fam_length(FAMObject *self)
 {
-    if (self->keys_kind) {
-        return PyArray_SIZE((PyArrayObject *)self->keys);
-    }
-    return PyList_GET_SIZE(self->keys);
+    return self->keys_size;
 }
 
 
@@ -887,9 +924,7 @@ fam_dealloc(FAMObject *self)
 {
     PyMem_Del(self->table);
 
-    key_count_global -= self->keys_kind
-        ? PyArray_SIZE((PyArrayObject *)self->keys)
-        : PyList_GET_SIZE(self->keys);
+    key_count_global -= self->keys_size;
 
     Py_DECREF(self->keys);
     Py_TYPE(self)->tp_free((PyObject *)self);
@@ -1043,12 +1078,8 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     Py_ssize_t keys_size = keys_kind
         ? PyArray_SIZE((PyArrayObject *)keys)
         : PyList_GET_SIZE(keys);
-
+    self->keys_size = keys_size;
     key_count_global += keys_size;
-
-    // PyObject* icc = PyLong_FromSsize_t(key_count_global);
-    // DEBUG_MSG_OBJ("key_count_global", icc);
-    // Py_DECREF(icc);
 
     // NOTE: this does iterate and insert keys
     if (grow_table(self, keys_size)) {
@@ -1060,6 +1091,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         PyObject *v;
         if (keys_kind) {
             PyArrayObject *a = (PyArrayObject *)self->keys;
+            // REVIEW: is this borrowed or owned?
             v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
         }
         else {

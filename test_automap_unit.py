@@ -54,5 +54,39 @@ def test_fam_array_len():
     a1 = np.array((10, 20, 30, 40))
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
+    assert fam[10] == 0
+    assert fam[20] == 1
+    assert fam[30] == 2
+    assert fam[40] == 3
 
-    # assert fam[20] == 1
+
+def test_am_array_raises():
+    a1 = np.array((10, 20, 30, 40))
+    a1.flags.writeable = False
+    am = AutoMap(a1)
+    with pytest.raises(NotImplementedError):
+        am.update((60, 80))
+
+    with pytest.raises(NotImplementedError):
+        am.add(80)
+
+
+def test_fam_array_values_a():
+    a1 = np.array((10, 20, 30, 40))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert list(fam.values()) == [0, 1, 2, 3]
+
+
+def test_fam_array_keys_a():
+    a1 = np.array((10, 20, 30, 40))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert list(fam.keys()) == [10, 20, 30, 40]
+
+
+def test_fam_array_items_a():
+    a1 = np.array((10, 20, 30, 40))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert list(fam.items()) == [(10, 0), (20, 1), (30, 2), (40, 3)]
