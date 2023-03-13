@@ -171,18 +171,12 @@ typedef struct {
 // ARRAY_S, // bytes
 // ARRAY_U, // unicode
 
-typedef enum {
-    LIST = 0,
-    ARRAY = 1, // make arrays truthy
-} KeysKind;
-
-
 typedef struct {
     PyObject_VAR_HEAD
     Py_ssize_t table_size;
     TableElement *table;    // an array of TableElement structs
     PyObject *keys;
-    KeysKind keys_kind;
+    int keys_is_array;
     Py_ssize_t keys_size;
 } FAMObject;
 
@@ -299,7 +293,7 @@ fami_iternext(FAMIObject *self)
     }
     switch (self->kind) {
         case ITEMS: {
-            if (self->fam->keys_kind) {
+            if (self->fam->keys_is_array) {
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
                 // assuming a non-borrowed reference from array
                 return PyTuple_Pack(
@@ -317,7 +311,7 @@ fami_iternext(FAMIObject *self)
             }
         }
         case KEYS: {
-            if (self->fam->keys_kind) {
+            if (self->fam->keys_is_array) {
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
                 return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
             }
@@ -562,9 +556,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     Py_hash_t mixin = Py_ABS(hash);
 
     PyObject **keys = NULL;
-    if (self->keys_kind == ARRAY) {
-    }
-    else {
+    if (!self->keys_is_array) {
         keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
     }
     Py_ssize_t table_pos = hash & mask; // taking the modulo
@@ -581,7 +573,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
                 table_pos++;
                 continue;
             }
-            if (self->keys_kind) {
+            if (self->keys_is_array) {
                 a = (PyArrayObject *)self->keys;
                 // REVIEW: is this a borrowed or owned ref?
                 guess = PyArray_GETITEM(a,
@@ -687,7 +679,7 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
     // if we have an old table, move them into the new table
     if (size_old) {
 
-        if (self->keys_kind == ARRAY) {
+        if (self->keys_is_array) {
             PyErr_SetString(PyExc_NotImplementedError, "Cannot grow table for array keys");
             return -1;
         }
@@ -713,7 +705,7 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
     return 0;
 }
 
-        // if (self->keys_kind) {
+        // if (self->keys_is_array) {
         //     PyArrayObject *a = (PyArrayObject *)self->keys;
         //     v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
         // }
@@ -737,13 +729,8 @@ copy(PyTypeObject *cls, FAMObject *self)
         Py_INCREF(self);
         return self;
     }
-    // NOTE: branch on keys_kind
     PyObject *keys = NULL;
-    if (self->keys_kind) {
-        // do not need to do a deep copy as immmutable
-        // if ((keys = PyArray_NewCopy((PyArrayObject *)self->keys, NPY_ANYORDER))) {
-        //     PyArray_CLEARFLAGS((PyArrayObject *)keys, NPY_ARRAY_WRITEABLE);
-        // }
+    if (self->keys_is_array) {
         keys = self->keys;
         // assume we do not need to incref as fam_new does
         // Py_INCREF(keys);
@@ -765,7 +752,7 @@ copy(PyTypeObject *cls, FAMObject *self)
     key_count_global += self->keys_size;
     new->keys = keys;
     new->table_size = self->table_size;
-    new->keys_kind = self->keys_kind;
+    new->keys_is_array = self->keys_is_array;
     new->keys_size = self->keys_size;
 
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
@@ -782,7 +769,7 @@ copy(PyTypeObject *cls, FAMObject *self)
 static int
 extend(FAMObject *self, PyObject *keys)
 {
-    if (self->keys_kind == ARRAY) {
+    if (self->keys_is_array) {
         PyErr_SetString(PyExc_NotImplementedError, "Not supported for array keys");
         return -1;
     }
@@ -819,7 +806,7 @@ extend(FAMObject *self, PyObject *keys)
 static int
 append(FAMObject *self, PyObject *key)
 {
-    if (self->keys_kind == ARRAY) {
+    if (self->keys_is_array) {
         PyErr_SetString(PyExc_NotImplementedError, "Not supported for array keys");
         return -1;
     }
@@ -1042,7 +1029,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    KeysKind keys_kind = LIST;
+    int keys_is_array = 0;
 
     if (!keys) {
         keys = PyList_New(0);
@@ -1059,7 +1046,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             PyErr_SetString(PyExc_TypeError, "Arrays must be 1-dimensional");
             return NULL;
         }
-        keys_kind = ARRAY;
+        keys_is_array = 1;
         // REVIEW: do we need to incref? if not, we need conditionally decref below
         Py_INCREF(keys);
     }
@@ -1078,9 +1065,9 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     }
 
     self->keys = keys;
-    self->keys_kind = keys_kind;
+    self->keys_is_array = keys_is_array;
 
-    Py_ssize_t keys_size = keys_kind
+    Py_ssize_t keys_size = keys_is_array
         ? PyArray_SIZE((PyArrayObject *)keys)
         : PyList_GET_SIZE(keys);
     self->keys_size = keys_size;
@@ -1094,7 +1081,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     for (Py_ssize_t i = 0; i < keys_size; i++) {
         // getting an item from keys can be specialized based on key type
         PyObject *v;
-        if (keys_kind) {
+        if (keys_is_array) {
             PyArrayObject *a = (PyArrayObject *)self->keys;
             // REVIEW: is this borrowed or owned?
             v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
