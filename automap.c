@@ -1029,23 +1029,24 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             PyErr_SetString(PyExc_TypeError, "Arrays must be 1-dimensional");
             return NULL;
         }
-
-        // if (cls == *AMType) {
-        //     PyErr_SetString(PyExc_TypeError, "got AM in array");
-        //     return NULL;
-        // }
-
-        if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
-            PyErr_SetString(PyExc_TypeError, "Arrays must be immutable");
-            return NULL;
+        if (cls == &AMType) {
+            // if an automap, create and own the list
+            if ((PyArray_TYPE(keys) == NPY_DATETIME)
+                || (PyArray_TYPE(keys) == NPY_TIMEDELTA)){
+                keys = PySequence_List(keys); // force iteration of scalars
+            }
+            else { // calling tolist() converts to objs
+                keys = PyArray_ToList((PyArrayObject *)keys);
+            }
         }
-
-        // if an automap, create and own the list conversion
-        // NOTE: can only ToList for all bute dt64 types
-        // keys = PyArray_ToList((PyArrayObject *)keys);
-
-        keys_is_array = 1;
-        Py_INCREF(keys);
+        else {
+            if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
+                PyErr_SetString(PyExc_TypeError, "Arrays must be immutable");
+                return NULL;
+            }
+            keys_is_array = 1;
+            Py_INCREF(keys);
+        }
     }
     else { // assume an arbitrary iterable
         keys = PySequence_List(keys);
