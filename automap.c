@@ -294,7 +294,7 @@ fami_iternext(FAMIObject *self)
                 // assuming a non-borrowed reference from array
                 return PyTuple_Pack(
                     2,
-                    PyArray_GETITEM(a, PyArray_GETPTR1(a, index)),
+                    PyArray_ToScalar(PyArray_GETPTR1(a, index), a),
                     PyList_GET_ITEM(int_cache, index)
                 );
             }
@@ -309,7 +309,7 @@ fami_iternext(FAMIObject *self)
         case KEYS: {
             if (self->fam->keys_is_array) {
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
-                return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
+                return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
             }
             else {
                 PyObject *yield = PyList_GET_ITEM(self->fam->keys, index);
@@ -571,9 +571,10 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
             }
             if (self->keys_is_array) {
                 a = (PyArrayObject *)self->keys;
-                guess = PyArray_GETITEM(a,
-                        PyArray_GETPTR1(a, table[table_pos].keys_pos));
-                DEBUG_MSG_OBJ("guess", guess);
+                guess = PyArray_ToScalar(
+                        PyArray_GETPTR1(a, table[table_pos].keys_pos),
+                        a);
+                // DEBUG_MSG_OBJ("guess", guess);
             }
             else {
                 guess = keys[table[table_pos].keys_pos];
@@ -1075,23 +1076,26 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         Py_DECREF(self);
         return NULL;
     }
-    for (Py_ssize_t i = 0; i < keys_size; i++) {
-        // getting an item from keys can be specialized based on key type
-        PyObject *v;
-        if (keys_is_array) {
-            PyArrayObject *a = (PyArrayObject *)self->keys;
-            // REVIEW: is this borrowed or owned?
-            v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
-        }
-        else {
-            v = PyList_GET_ITEM(self->keys, i);
-        }
-        if (insert(self, v, i, -1)) {
-            Py_DECREF(self);
-            return NULL;
-        }
-        if (keys_is_array) {
+    Py_ssize_t i = 0;
+    if (keys_is_array) {
+        PyObject *v = NULL;
+        PyArrayObject *a = (PyArrayObject *)self->keys;
+        for (; i < keys_size; i++) {
+            // use ToScalar, not GETITEM, to get NumPy types, essential for datetime64
+            v = PyArray_ToScalar(PyArray_GETPTR1(a, i), a);
+            if (insert(self, v, i, -1)) {
+                Py_DECREF(self);
+                return NULL;
+            }
             Py_DECREF(v);
+        }
+    }
+    else {
+        for (; i < keys_size; i++) {
+            if (insert(self, PyList_GET_ITEM(self->keys, i), i, -1)) {
+                Py_DECREF(self);
+                return NULL;
+            }
         }
     }
     return (PyObject *)self;

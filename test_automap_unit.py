@@ -36,13 +36,12 @@ def test_constructor_array_a():
         fam = FrozenAutoMap(a1)
 
 
-# def test_constructor_array_b():
-#     a1 = np.array(('2022-01', '2023-05'), dtype=np.datetime64)
-#     a1.flags.writeable = False
-#     import ipdb; ipdb.set_trace()
-#     fam = FrozenAutoMap(a1)
-#     assert fam[np.datetime64('2022-05')] == 1
-#     # assert np.datetime64('2022-05') in a1
+def test_constructor_array_b():
+    a1 = np.array(("2022-01", "2023-05"), dtype=np.datetime64)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert fam[np.datetime64("2023-05")] == 1
+    # assert np.datetime64('2022-05') in a1
 
 
 def test_constructor_array_c():
