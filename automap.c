@@ -633,6 +633,10 @@ lookup(FAMObject *self, PyObject *key) {
         if (PyFloat_Check(key)) {
             // NOTE: this works for floats or others, might set error
             double dv = PyFloat_AsDouble(key);
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                return -1;
+            }
             v = (Py_ssize_t)dv;
             if (v != dv) {
                 DEBUG_MSG_OBJ("could not convert", key);
@@ -642,10 +646,10 @@ lookup(FAMObject *self, PyObject *key) {
         else {
             // NOTE: this works for ints and bools
             v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
-        }
-        if (PyErr_Occurred()) {
-            PyErr_Clear();
-            return -1;
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                return -1;
+            }
         }
         table_pos = lookup_hash_int64(self, v);
     }
