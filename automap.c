@@ -1031,8 +1031,8 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         }
         if (cls == &AMType) {
             // if an automap, create and own the list
-            if ((PyArray_TYPE(keys) == NPY_DATETIME)
-                || (PyArray_TYPE(keys) == NPY_TIMEDELTA)){
+            if ((PyArray_TYPE((PyArrayObject *)keys) == NPY_DATETIME)
+                || (PyArray_TYPE((PyArrayObject *)keys) == NPY_TIMEDELTA)){
                 keys = PySequence_List(keys); // force iteration of scalars
             }
             else { // calling tolist() converts to objs
