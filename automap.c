@@ -543,52 +543,35 @@ famv_new(FAMObject *fam, int kind)
     return (PyObject *)famv;
 }
 
-// Given a key and a computed hash, return the table_pos if that hash and key are found
+// Given a key and a computed hash, return the table_pos if that hash and key are found.
 static Py_ssize_t
 lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 {
     TableElement *table = self->table;
     Py_ssize_t mask = self->table_size - 1;
     Py_hash_t mixin = Py_ABS(hash);
+    Py_ssize_t table_pos = hash & mask; // taking the modulo
 
     PyObject **keys = NULL;
-    if (!self->keys_is_array) {
-        keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
-    }
-    Py_ssize_t table_pos = hash & mask; // taking the modulo
+    keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
     PyObject *guess = NULL;
-    PyArrayObject *a = NULL;
     int result = -1;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             Py_hash_t h = table[table_pos].hash;
-            if (h == -1) { // Miss.
+            if (h == -1) { // Miss. Found an unassigned position that can be assigned for insertion.
                 return table_pos;
             }
             if (h != hash) { // Collision.
                 table_pos++;
                 continue;
             }
-            if (self->keys_is_array) {
-                a = (PyArrayObject *)self->keys;
-                guess = PyArray_ToScalar(
-                        PyArray_GETPTR1(a, table[table_pos].keys_pos),
-                        a);
-                // DEBUG_MSG_OBJ("guess", guess);
-                // NOTE: no reason to an object compare as guess is a newly created object
-                result = PyObject_RichCompareBool(guess, key, Py_EQ);
-                Py_DECREF(guess);
-
+            guess = keys[table[table_pos].keys_pos];
+            if (guess == key) { // Hit. Object ID comparison
+                return table_pos;
             }
-            else {
-                guess = keys[table[table_pos].keys_pos];
-                // try object id compare first
-                if (guess == key) { // Hit.
-                    return table_pos;
-                }
-                result = PyObject_RichCompareBool(guess, key, Py_EQ);
-            }
+            result = PyObject_RichCompareBool(guess, key, Py_EQ);
 
             if (result < 0) { // Error.
                 return -1;
@@ -603,6 +586,53 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 }
 
 
+static Py_ssize_t
+lookup_hash_array(FAMObject *self, PyObject *key, Py_hash_t hash)
+{
+    TableElement *table = self->table;
+    Py_ssize_t mask = self->table_size - 1;
+    Py_hash_t mixin = Py_ABS(hash);
+    Py_ssize_t table_pos = hash & mask; // taking the modulo
+
+    PyObject *guess = NULL;
+    PyArrayObject *a = NULL;
+    int result = -1;
+
+    while (1) {
+        for (Py_ssize_t i = 0; i < SCAN; i++) {
+            Py_hash_t h = table[table_pos].hash;
+            if (h == -1) { // Miss. Found an unassigned position that can be assigned for insertion.
+                return table_pos;
+            }
+            if (h != hash) { // Collision.
+                table_pos++;
+                continue;
+            }
+
+            // if array is an int array, can skip creating scalar and compare directly
+            a = (PyArrayObject *)self->keys;
+            guess = PyArray_ToScalar(
+                    PyArray_GETPTR1(a, table[table_pos].keys_pos),
+                    a);
+            // DEBUG_MSG_OBJ("guess", guess);
+            // NOTE: no reason to an object compare as guess is a newly created object
+            result = PyObject_RichCompareBool(guess, key, Py_EQ);
+            Py_DECREF(guess);
+
+            if (result < 0) { // Error.
+                return -1;
+            }
+            if (result) { // Hit.
+                return table_pos;
+            }
+            table_pos++;
+        }
+        table_pos = (5 * (table_pos - SCAN) + (mixin >>= 1) + 1) & mask;
+    }
+}
+
+
+
 // Given a key, return the Py_ssize_t keys position value stored in the TableElement
 static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
@@ -610,7 +640,13 @@ lookup(FAMObject *self, PyObject *key) {
     if (hash == -1) {
         return -1;
     }
-    Py_ssize_t table_pos = lookup_hash(self, key, hash);
+    Py_ssize_t table_pos;
+    if (self->keys_is_array) {
+        table_pos = lookup_hash_array(self, key, hash);
+    }
+    else {
+        table_pos = lookup_hash(self, key, hash);
+    }
 
     // REVIEW: why would the table have a -1 as a hash at this index
     if ((table_pos < 0) || (self->table[table_pos].hash == -1)) {
@@ -619,7 +655,7 @@ lookup(FAMObject *self, PyObject *key) {
     return self->table[table_pos].keys_pos;
 }
 
-// Insert a key_pos, hash pair into the table. Assumes table already has appropriate size. Return 0 on success, -1 on error.
+// Insert a key_pos, hash pair into the table. Assumes table already has appropriate size. When inserting a new itme, `hash` is -1, forcing a fresh hash to be computed here. Return 0 on success, -1 on error.
 static int
 insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
 {
@@ -630,10 +666,18 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
         }
     }
     // table position is not dependent on keys_pos
-    Py_ssize_t table_pos = lookup_hash(self, key, hash);
+    Py_ssize_t table_pos;
+    if (self->keys_is_array) {
+        table_pos = lookup_hash_array(self, key, hash);
+    }
+    else {
+        table_pos = lookup_hash(self, key, hash);
+    }
+
     if (table_pos < 0) {
         return -1;
     }
+    // We expect, on insertion, to get back a table_pos that points to an unassigned hash value (-1); if we get anything else, we have found a match to an already-existing key, and thus raise a NonUniqueError error.
     if (self->table[table_pos].hash != -1) {
         PyErr_SetObject(NonUniqueError, key);
         return -1;
@@ -671,6 +715,7 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
         return -1;
     }
 
+    // initialize all hash and keys_pos values to -1
     Py_ssize_t table_pos;
     for (table_pos = 0; table_pos < size_new + SCAN - 1; table_pos++) {
         table_new[table_pos].hash = -1;
@@ -1071,7 +1116,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     self->keys_size = keys_size;
     key_count_global += keys_size;
 
-    // NOTE: this does iterate and insert keys
+    // NOTE: this only iterates and insert keys when there growing from an old to a new table; on itialization, this does not use keys
     if (grow_table(self, keys_size)) {
         Py_DECREF(self);
         return NULL;
