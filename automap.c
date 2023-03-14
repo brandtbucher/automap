@@ -316,7 +316,8 @@ fami_iternext(FAMIObject *self)
         case KEYS: {
             if (self->fam->keys_is_array) {
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
-                return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
+                return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
+                // return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
             }
             else {
                 // PyObject *yield = PyList_GET_ITEM(self->fam->keys, index);
@@ -576,7 +577,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             Py_hash_t h = table[table_pos].hash;
-            if (h == -1) { // Miss. Found an unassigned position that can be assigned for insertion.
+            if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
             if (h != hash) { // Collision.

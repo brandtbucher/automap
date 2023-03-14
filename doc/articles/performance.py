@@ -90,7 +90,7 @@ class FAMALookup(MapProcessor):
 
     def __call__(self):
         m = self.fama
-        for k in self.list:
+        for k in self.array:
             _ = m[k]
 
 
@@ -102,6 +102,34 @@ class DictLookup(MapProcessor):
         m = self.d
         for k in self.list:
             _ = m[k]
+
+
+# -------------------------------------------------------------------------------
+class FAMLKeys(MapProcessor):
+    NAME = "FAM(L): keys"
+    SORT = 0
+
+    def __call__(self):
+        for v in self.faml.keys():
+            pass
+
+
+class FAMAKeys(MapProcessor):
+    NAME = "FAM(A): keys"
+    SORT = 0
+
+    def __call__(self):
+        for v in self.fama.keys():
+            pass
+
+
+class DictKeys(MapProcessor):
+    NAME = "Dict: keys"
+    SORT = 0
+
+    def __call__(self):
+        for v in self.d.keys():
+            pass
 
 
 # -------------------------------------------------------------------------------
@@ -133,7 +161,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 200
+NUMBER = 10
 
 from itertools import product
 
@@ -305,16 +333,16 @@ def get_versions() -> str:
 
 CLS_PROCESSOR = (
     FAMLInstantiate,
-    AMAInstantiate,
+    # AMAInstantiate,
     FAMAInstantiate,
-    FAMAtolistInstantiate,
+    # FAMAtolistInstantiate,
     DictInstantiate,
     FAMLLookup,
     FAMALookup,
     DictLookup,
-    FAMLItems,
-    FAMAItems,
-    DictItems,
+    FAMLKeys,
+    FAMAKeys,
+    DictKeys,
 )
 
 CLS_FF = (
