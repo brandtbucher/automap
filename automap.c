@@ -558,6 +558,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     Py_ssize_t table_pos = hash & mask; // taking the modulo
     PyObject *guess = NULL;
     PyArrayObject *a = NULL;
+    int result = -1;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
@@ -575,22 +576,20 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
                         PyArray_GETPTR1(a, table[table_pos].keys_pos),
                         a);
                 // DEBUG_MSG_OBJ("guess", guess);
+                // NOTE: no reason to an object compare as guess is a newly created object
+                result = PyObject_RichCompareBool(guess, key, Py_EQ);
+                Py_DECREF(guess);
+
             }
             else {
                 guess = keys[table[table_pos].keys_pos];
+                // try object id compare first
+                if (guess == key) { // Hit.
+                    return table_pos;
+                }
+                result = PyObject_RichCompareBool(guess, key, Py_EQ);
             }
 
-            // try object id compare first
-            if (guess == key) { // Hit.
-                if (self->keys_is_array) {
-                    Py_DECREF(guess);
-                }
-                return table_pos;
-            }
-            int result = PyObject_RichCompareBool(guess, key, Py_EQ);
-            if (self->keys_is_array) {
-                Py_DECREF(guess);
-            }
             if (result < 0) { // Error.
                 return -1;
             }
@@ -1081,7 +1080,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         PyObject *v = NULL;
         PyArrayObject *a = (PyArrayObject *)self->keys;
         for (; i < keys_size; i++) {
-            // use ToScalar, not GETITEM, to get NumPy types, essential for datetime64
+            // use PyArray_ToScalar, not PyArray_GETITEM, to get NumPy types, essential for datetime64
             v = PyArray_ToScalar(PyArray_GETPTR1(a, i), a);
             if (insert(self, v, i, -1)) {
                 Py_DECREF(self);
