@@ -248,6 +248,8 @@ int_cache_remove(Py_ssize_t key_count)
 typedef struct {
     PyObject_VAR_HEAD
     FAMObject *fam;
+    PyObject **keys_fast;
+    PyObject **int_cache_fast;
     ViewKind kind;
     int reversed;
     Py_ssize_t index; // current index state, mutated in-place
@@ -297,14 +299,17 @@ fami_iternext(FAMIObject *self)
                     2,
                     // PyArray_ToScalar(PyArray_GETPTR1(a, index), a),
                     PyArray_GETITEM(a, PyArray_GETPTR1(a, index)),
-                    PyList_GET_ITEM(int_cache, index)
+                    self->int_cache_fast[index]
+                    // PyList_GET_ITEM(int_cache, index)
                 );
             }
             else {
                 return PyTuple_Pack(
                     2,
-                    PyList_GET_ITEM(self->fam->keys, index),
-                    PyList_GET_ITEM(int_cache, index)
+                    // PyList_GET_ITEM(self->fam->keys, index),
+                    self->keys_fast[index],
+                    self->int_cache_fast[index]
+                    // PyList_GET_ITEM(int_cache, index)
                 );
             }
         }
@@ -314,13 +319,15 @@ fami_iternext(FAMIObject *self)
                 return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
             }
             else {
-                PyObject *yield = PyList_GET_ITEM(self->fam->keys, index);
+                // PyObject *yield = PyList_GET_ITEM(self->fam->keys, index);
+                PyObject* yield = self->keys_fast[index];
                 Py_INCREF(yield);
                 return yield;
             }
         }
         case VALUES: {
-            PyObject *yield = PyList_GET_ITEM(int_cache, index);
+            // PyObject *yield = PyList_GET_ITEM(int_cache, index);
+            PyObject *yield = self->int_cache_fast[index];
             Py_INCREF(yield);
             return yield;
         }
@@ -374,6 +381,13 @@ fami_new(FAMObject *fam, ViewKind kind, int reversed)
     }
     Py_INCREF(fam);
     fami->fam = fam;
+    if (!fam->keys_is_array) {
+        fami->keys_fast = PySequence_Fast_ITEMS(fam->keys);
+    }
+    else {
+        fami->keys_fast = NULL;
+    }
+    fami->int_cache_fast = PySequence_Fast_ITEMS(int_cache);
     fami->kind = kind;
     fami->reversed = reversed;
     fami->index = 0;
