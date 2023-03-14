@@ -90,7 +90,7 @@ class FAMALookup(MapProcessor):
 
     def __call__(self):
         m = self.fama
-        for k in self.array:
+        for k in self.list:
             _ = m[k]
 
 
