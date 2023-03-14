@@ -124,7 +124,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 100
+NUMBER = 200
 
 from itertools import product
 
@@ -317,7 +317,7 @@ CLS_FF = (
 
 def run_test():
     records = []
-    for size in (1_000, 100_000, 1_000_000):
+    for size in (1_000, 10_000, 100_000):
         for ff in CLS_FF:
             fixture_label, fixture = ff.get_label_array(size)
             for cls in CLS_PROCESSOR:

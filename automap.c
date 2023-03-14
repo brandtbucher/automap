@@ -120,10 +120,6 @@ really gives us our awesome performance.
 # include "numpy/arrayobject.h"
 # include "numpy/arrayscalars.h"
 
-// # ifndef Py_UNREACHABLE
-// # define Py_UNREACHABLE() Py_FatalError("https://xkcd.com/2200")
-// # endif
-
 # define DEBUG_MSG_OBJ(msg, obj)     \
     fprintf(stderr, "--- %s: %i: %s: ", __FILE__, __LINE__, __FUNCTION__); \
     fprintf(stderr, #msg " ");      \
@@ -585,9 +581,15 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 
             // try object id compare first
             if (guess == key) { // Hit.
+                if (self->keys_is_array) {
+                    Py_DECREF(guess);
+                }
                 return table_pos;
             }
             int result = PyObject_RichCompareBool(guess, key, Py_EQ);
+            if (self->keys_is_array) {
+                Py_DECREF(guess);
+            }
             if (result < 0) { // Error.
                 return -1;
             }
@@ -610,7 +612,7 @@ lookup(FAMObject *self, PyObject *key) {
     }
     Py_ssize_t table_pos = lookup_hash(self, key, hash);
 
-    // why would the table have a -1 as a hash at this index
+    // REVIEW: why would the table have a -1 as a hash at this index
     if ((table_pos < 0) || (self->table[table_pos].hash == -1)) {
         return -1;
     }
@@ -704,22 +706,6 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
     PyMem_Del(table_old);
     return 0;
 }
-
-        // if (self->keys_is_array) {
-        //     PyArrayObject *a = (PyArrayObject *)self->keys;
-        //     v = PyArray_GETITEM(a, PyArray_GETPTR1(a, i));
-        // }
-        // else {
-        //     v = PyList_GET_ITEM(self->keys, i);
-        // }
-
-        // if ((h != -1) && insert(self, v, i, h)) {
-        //     // on error, delete the new table and re-assign the old
-        //     PyMem_Del(self->table);
-        //     self->table = table_old;
-        //     self->table_size = size_old;
-        //     return -1;
-        // }
 
 // Create a copy. Returns NULL on error.
 static FAMObject *
@@ -1047,8 +1033,8 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             return NULL;
         }
         keys_is_array = 1;
-        // REVIEW: do we need to incref? if not, we need conditionally decref below
         Py_INCREF(keys);
+        // keys = PyArray_ToList((PyArrayObject *)keys);
     }
     else { // assume an arbitrary iterable
         keys = PySequence_List(keys);
@@ -1092,6 +1078,9 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         if (insert(self, v, i, -1)) {
             Py_DECREF(self);
             return NULL;
+        }
+        if (keys_is_array) {
+            Py_DECREF(v);
         }
     }
     return (PyObject *)self;
