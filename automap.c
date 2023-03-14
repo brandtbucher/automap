@@ -627,12 +627,24 @@ lookup_hash_int64(FAMObject *self, npy_int64 key)
 static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
     Py_ssize_t table_pos;
+    Py_ssize_t v;
+
     if (self->keys_is_array) {
-        // NOTE: this works for ints and bools, but not for floats!
-        Py_ssize_t v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
+        if (PyFloat_Check(key)) {
+            // NOTE: this works for floats or others, might set error
+            double dv = PyFloat_AsDouble(key);
+            v = (Py_ssize_t)dv;
+            if (v != dv) {
+                DEBUG_MSG_OBJ("could not convert", key);
+                return -1;
+            }
+        }
+        else {
+            // NOTE: this works for ints and bools
+            v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
+        }
         if (PyErr_Occurred()) {
             PyErr_Clear();
-            DEBUG_MSG_OBJ("could not convert", key);
             return -1;
         }
         table_pos = lookup_hash_int64(self, v);
