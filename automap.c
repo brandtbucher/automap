@@ -629,6 +629,7 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
             return -1;
         }
     }
+    // table position is not dependent on keys_pos
     Py_ssize_t table_pos = lookup_hash(self, key, hash);
     if (table_pos < 0) {
         return -1;
@@ -1024,28 +1025,21 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return (PyObject *)copy(cls, (FAMObject *)keys);
     }
     else if (PyArray_Check(keys)) {
-        if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
-            PyErr_SetString(PyExc_TypeError, "Arrays must be immutable");
-            return NULL;
-        }
         if (PyArray_NDIM((PyArrayObject *)keys) != 1) {
             PyErr_SetString(PyExc_TypeError, "Arrays must be 1-dimensional");
             return NULL;
         }
+        if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
+            PyErr_SetString(PyExc_TypeError, "Arrays must be immutable");
+            return NULL;
+        }
+
+        // if an automap, create and own the list conversion
+        // NOTE: can only ToList for all bute dt64 types
+        // keys = PyArray_ToList((PyArrayObject *)keys);
+
         keys_is_array = 1;
         Py_INCREF(keys);
-
-        // NOTE: can only ToList for "objectable" dtypes; other dtypes must be sequenced through
-        // DTYPE_OBJECTABLE_KINDS = frozenset((
-        // DTYPE_FLOAT_KIND,
-        // DTYPE_COMPLEX_KIND,
-        // DTYPE_OBJECT_KIND,
-        // DTYPE_BOOL_KIND,
-        // 'U', 'S', # str kinds
-        // 'i', 'u' # int kinds
-        // ))
-
-        // keys = PyArray_ToList((PyArrayObject *)keys);
     }
     else { // assume an arbitrary iterable
         keys = PySequence_List(keys);
@@ -1081,6 +1075,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         PyArrayObject *a = (PyArrayObject *)self->keys;
         for (; i < keys_size; i++) {
             // use PyArray_ToScalar, not PyArray_GETITEM, to get NumPy types, essential for datetime64
+            // NOTE: might store PyArray_GETPTR1(a, i) result as the keys_pos and avoid lookup later; problem is that we use the same position to read from int_cache
             v = PyArray_ToScalar(PyArray_GETPTR1(a, i), a);
             if (insert(self, v, i, -1)) {
                 Py_DECREF(self);
