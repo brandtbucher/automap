@@ -1030,11 +1030,10 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             return NULL;
         }
 
-        if (PyObject_TypeCheck(self, &AMType)) {
-            //
-            PyErr_SetString(PyExc_TypeError, "got AM in array");
-            return NULL;
-        }
+        // if (cls == *AMType) {
+        //     PyErr_SetString(PyExc_TypeError, "got AM in array");
+        //     return NULL;
+        // }
 
         if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
             PyErr_SetString(PyExc_TypeError, "Arrays must be immutable");

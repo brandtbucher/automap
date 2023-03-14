@@ -129,3 +129,9 @@ def test_fam_array_items_c():
     fam2 = FrozenAutoMap(fam1)
     assert list(fam2.items()) == [("a", 0), ("b", 1), ("c", 2)]
     assert list(fam1.items()) == [("a", 0), ("b", 1), ("c", 2)]
+
+
+def test_am_array_constructor_a():
+    a1 = np.array(("a", "b", "c"))
+    a1.flags.writeable = False
+    am1 = AutoMap(a1)
