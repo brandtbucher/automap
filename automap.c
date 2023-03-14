@@ -290,11 +290,13 @@ fami_iternext(FAMIObject *self)
     switch (self->kind) {
         case ITEMS: {
             if (self->fam->keys_is_array) {
+
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
                 // assuming a non-borrowed reference from array
                 return PyTuple_Pack(
                     2,
-                    PyArray_ToScalar(PyArray_GETPTR1(a, index), a),
+                    // PyArray_ToScalar(PyArray_GETPTR1(a, index), a),
+                    PyArray_GETITEM(a, PyArray_GETPTR1(a, index)),
                     PyList_GET_ITEM(int_cache, index)
                 );
             }
@@ -626,8 +628,13 @@ static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
     Py_ssize_t table_pos;
     if (self->keys_is_array) {
-        // TODO: determine type of key and get an int if possible, else return -1
-        npy_int64 v = 0;
+        // NOTE: this works for ints and bools, but not for floats!
+        Py_ssize_t v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
+        if (PyErr_Occurred()) {
+            PyErr_Clear();
+            DEBUG_MSG_OBJ("could not convert", key);
+            return -1;
+        }
         table_pos = lookup_hash_int64(self, v);
     }
     else {

@@ -68,6 +68,20 @@ def test_fam_array_len_b():
     assert fam[40] == 3
 
 
+def test_fam_array_get_a():
+    a1 = np.array((1, 100, 300, 4000))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1) == 0
+    assert fam.get(True) == 0
+    assert fam.get(a1[2]) == 2
+
+    # does not work yet
+    assert fam.get(1.0) == 0
+
+
 def test_am_array_raises():
     a1 = np.array((10, 20, 30, 40))
     a1.flags.writeable = False
