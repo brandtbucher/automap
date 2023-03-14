@@ -571,9 +571,9 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
             }
             if (self->keys_is_array) {
                 a = (PyArrayObject *)self->keys;
-                // REVIEW: is this a borrowed or owned ref?
                 guess = PyArray_GETITEM(a,
                         PyArray_GETPTR1(a, table[table_pos].keys_pos));
+                DEBUG_MSG_OBJ("guess", guess);
             }
             else {
                 guess = keys[table[table_pos].keys_pos];
@@ -1034,6 +1034,17 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         }
         keys_is_array = 1;
         Py_INCREF(keys);
+
+        // NOTE: can only ToList for "objectable" dtypes; other dtypes must be sequenced through
+        // DTYPE_OBJECTABLE_KINDS = frozenset((
+        // DTYPE_FLOAT_KIND,
+        // DTYPE_COMPLEX_KIND,
+        // DTYPE_OBJECT_KIND,
+        // DTYPE_BOOL_KIND,
+        // 'U', 'S', # str kinds
+        // 'i', 'u' # int kinds
+        // ))
+
         // keys = PyArray_ToList((PyArrayObject *)keys);
     }
     else { // assume an arbitrary iterable

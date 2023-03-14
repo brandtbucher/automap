@@ -36,21 +36,30 @@ def test_constructor_array_a():
         fam = FrozenAutoMap(a1)
 
 
-def test_constructor_array_b():
+# def test_constructor_array_b():
+#     a1 = np.array(('2022-01', '2023-05'), dtype=np.datetime64)
+#     a1.flags.writeable = False
+#     import ipdb; ipdb.set_trace()
+#     fam = FrozenAutoMap(a1)
+#     assert fam[np.datetime64('2022-05')] == 1
+#     # assert np.datetime64('2022-05') in a1
+
+
+def test_constructor_array_c():
     a1 = np.array((10, 20, 30, 40)).reshape(2, 2)
     a1.flags.writeable = False
     with pytest.raises(TypeError):
         fam = FrozenAutoMap(a1)
 
 
-def test_fam_array_len():
+def test_fam_array_len_a():
     a1 = np.array((10, 20, 30, 40))
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
     assert len(fam) == 4
 
 
-def test_fam_array_len():
+def test_fam_array_len_b():
     a1 = np.array((10, 20, 30, 40))
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
