@@ -37,8 +37,17 @@ class FAMLInstantiate(MapProcessor):
         assert len(fam) == len(self.list)
 
 
+class AMAInstantiate(MapProcessor):
+    NAME = "AM(A): instantiate"
+    SORT = 0
+
+    def __call__(self):
+        fam = AutoMap(self.array)
+        assert len(fam) == len(self.list)
+
+
 class FAMAInstantiate(MapProcessor):
-    NAME = "FAM(A), instantiate"
+    NAME = "FAM(A): instantiate"
     SORT = 0
 
     def __call__(self):
@@ -47,7 +56,7 @@ class FAMAInstantiate(MapProcessor):
 
 
 class FAMAtolistInstantiate(MapProcessor):
-    NAME = "FAM(Atolist), instantiate"
+    NAME = "FAM(Atolist): instantiate"
     SORT = 0
 
     def __call__(self):
@@ -56,7 +65,7 @@ class FAMAtolistInstantiate(MapProcessor):
 
 
 class DictInstantiate(MapProcessor):
-    NAME = "Dict, instantiate"
+    NAME = "Dict: instantiate"
     SORT = 0
 
     def __call__(self):
@@ -76,7 +85,7 @@ class FAMLLookup(MapProcessor):
 
 
 class FAMALookup(MapProcessor):
-    NAME = "FAM(A), lookup"
+    NAME = "FAM(A): lookup"
     SORT = 0
 
     def __call__(self):
@@ -86,7 +95,7 @@ class FAMALookup(MapProcessor):
 
 
 class DictLookup(MapProcessor):
-    NAME = "Dict, lookup"
+    NAME = "Dict: lookup"
     SORT = 0
 
     def __call__(self):
@@ -106,7 +115,7 @@ class FAMLItems(MapProcessor):
 
 
 class FAMAItems(MapProcessor):
-    NAME = "FAM(A), items"
+    NAME = "FAM(A): items"
     SORT = 0
 
     def __call__(self):
@@ -115,7 +124,7 @@ class FAMAItems(MapProcessor):
 
 
 class DictItems(MapProcessor):
-    NAME = "Dict, items"
+    NAME = "Dict: items"
     SORT = 0
 
     def __call__(self):
@@ -296,6 +305,7 @@ def get_versions() -> str:
 
 CLS_PROCESSOR = (
     FAMLInstantiate,
+    AMAInstantiate,
     FAMAInstantiate,
     FAMAtolistInstantiate,
     DictInstantiate,

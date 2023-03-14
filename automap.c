@@ -587,16 +587,15 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 
 
 static Py_ssize_t
-lookup_hash_array(FAMObject *self, PyObject *key, Py_hash_t hash)
+lookup_hash_int64(FAMObject *self, npy_int64 key)
 {
     TableElement *table = self->table;
     Py_ssize_t mask = self->table_size - 1;
-    Py_hash_t mixin = Py_ABS(hash);
-    Py_ssize_t table_pos = hash & mask; // taking the modulo
+    Py_hash_t mixin = Py_ABS(key);
+    Py_ssize_t table_pos = key & mask; // taking the modulo
 
-    PyObject *guess = NULL;
-    PyArrayObject *a = NULL;
     int result = -1;
+    PyArrayObject *a = (PyArrayObject *)self->keys;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
@@ -604,24 +603,13 @@ lookup_hash_array(FAMObject *self, PyObject *key, Py_hash_t hash)
             if (h == -1) { // Miss. Found an unassigned position that can be assigned for insertion.
                 return table_pos;
             }
-            if (h != hash) { // Collision.
+            if (h != key) { // Collision.
                 table_pos++;
                 continue;
             }
-
             // if array is an int array, can skip creating scalar and compare directly
-            a = (PyArrayObject *)self->keys;
-            guess = PyArray_ToScalar(
-                    PyArray_GETPTR1(a, table[table_pos].keys_pos),
-                    a);
-            // DEBUG_MSG_OBJ("guess", guess);
-            // NOTE: no reason to an object compare as guess is a newly created object
-            result = PyObject_RichCompareBool(guess, key, Py_EQ);
-            Py_DECREF(guess);
+            result = key == *(npy_int64*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
 
-            if (result < 0) { // Error.
-                return -1;
-            }
             if (result) { // Hit.
                 return table_pos;
             }
@@ -633,18 +621,20 @@ lookup_hash_array(FAMObject *self, PyObject *key, Py_hash_t hash)
 
 
 
-// Given a key, return the Py_ssize_t keys position value stored in the TableElement
+// Given a key, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
 static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
-    Py_hash_t hash = PyObject_Hash(key);
-    if (hash == -1) {
-        return -1;
-    }
     Py_ssize_t table_pos;
     if (self->keys_is_array) {
-        table_pos = lookup_hash_array(self, key, hash);
+        // TODO: determine type of key and get an int if possible, else return -1
+        npy_int64 v = 0;
+        table_pos = lookup_hash_int64(self, v);
     }
     else {
+        Py_hash_t hash = PyObject_Hash(key);
+        if (hash == -1) {
+            return -1;
+        }
         table_pos = lookup_hash(self, key, hash);
     }
 
@@ -667,12 +657,7 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
     }
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos;
-    if (self->keys_is_array) {
-        table_pos = lookup_hash_array(self, key, hash);
-    }
-    else {
-        table_pos = lookup_hash(self, key, hash);
-    }
+    table_pos = lookup_hash(self, key, hash);
 
     if (table_pos < 0) {
         return -1;
@@ -686,6 +671,26 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
     self->table[table_pos].hash = hash;
     return 0;
 }
+
+static int
+insert_int64(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
+{
+    // table position is not dependent on keys_pos
+    Py_ssize_t table_pos;
+    table_pos = lookup_hash_int64(self, key);
+
+    if (table_pos < 0) {
+        return -1;
+    }
+    if (self->table[table_pos].hash != -1) {
+        PyErr_SetObject(NonUniqueError, PyLong_FromSsize_t(key));
+        return -1;
+    }
+    self->table[table_pos].keys_pos = keys_pos;
+    self->table[table_pos].hash = key; // key is the hash
+    return 0;
+}
+
 
 
 // Called in fam_new(), extend(), append(), with the size of observed keys. This table is updated only when append or extending. Only if there is an old table will keys be accessed Returns 0 on success, -1 on failure.
@@ -1074,10 +1079,11 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             PyErr_SetString(PyExc_TypeError, "Arrays must be 1-dimensional");
             return NULL;
         }
-        if (cls == &AMType) {
+        int array_t = PyArray_TYPE((PyArrayObject *)keys);
+
+        if (cls == &AMType || array_t != NPY_INT64) {
             // if an automap, create and own the list
-            if ((PyArray_TYPE((PyArrayObject *)keys) == NPY_DATETIME)
-                || (PyArray_TYPE((PyArrayObject *)keys) == NPY_TIMEDELTA)){
+            if (array_t == NPY_DATETIME || array_t == NPY_TIMEDELTA){
                 keys = PySequence_List(keys); // force iteration of scalars
             }
             else { // calling tolist() converts to objs
@@ -1086,7 +1092,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         }
         else {
             if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
-                PyErr_SetString(PyExc_TypeError, "Arrays must be immutable");
+                PyErr_SetString(PyExc_TypeError, "int64 Arrays must be immutable");
                 return NULL;
             }
             keys_is_array = 1;
@@ -1123,17 +1129,16 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     }
     Py_ssize_t i = 0;
     if (keys_is_array) {
-        PyObject *v = NULL;
         PyArrayObject *a = (PyArrayObject *)self->keys;
         for (; i < keys_size; i++) {
             // use PyArray_ToScalar, not PyArray_GETITEM, to get NumPy types, essential for datetime64
             // NOTE: might store PyArray_GETPTR1(a, i) result as the keys_pos and avoid lookup later; problem is that we use the same position to read from int_cache
-            v = PyArray_ToScalar(PyArray_GETPTR1(a, i), a);
-            if (insert(self, v, i, -1)) {
+            // v = PyArray_ToScalar(PyArray_GETPTR1(a, i), a);
+            npy_int64 v = *(npy_int64*)PyArray_GETPTR1(a, i);
+            if (insert_int64(self, v, i)) {
                 Py_DECREF(self);
                 return NULL;
             }
-            Py_DECREF(v);
         }
     }
     else {
