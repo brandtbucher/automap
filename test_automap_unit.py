@@ -83,7 +83,7 @@ def test_fam_array_len_b():
 # ------------------------------------------------------------------------------
 
 
-def test_fam_array_get_a():
+def test_fam_array_int_get_a():
     a1 = np.array((1, 100, 300, 4000), dtype=np.int64)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
@@ -95,7 +95,7 @@ def test_fam_array_get_a():
     assert fam.get(1.0) == 0
 
 
-def test_fam_array_get_b():
+def test_fam_array_int_get_b():
     a1 = np.array((1, 100, 300, 4000), dtype=np.int32)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
@@ -108,7 +108,7 @@ def test_fam_array_get_b():
     assert fam.get(1.1) is None
 
 
-def test_fam_array_get_c():
+def test_fam_array_int_get_c():
     a1 = np.array((1, 5, 10, 20), dtype=np.int16)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
@@ -120,7 +120,7 @@ def test_fam_array_get_c():
     assert fam.get(20.0) == 3
 
 
-def test_fam_array_get_d():
+def test_fam_array_int_get_d():
     a1 = np.array((1, 5, 10, 20), dtype=np.int8)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
@@ -131,6 +131,21 @@ def test_fam_array_get_d():
     assert fam.get(a1[2]) == 2
     assert fam.get(20.0) == 3
     assert fam.get(20.1) is None
+
+
+# ------------------------------------------------------------------------------
+
+
+def test_fam_array_float_get_a():
+    a1 = np.array((1.5, 10.2, 8.8), dtype=np.float64)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1.5) == 0
+    assert fam.get(10.2) == 1
+    assert fam.get(a1[1]) == 1
+    assert fam.get(8.8) == 2
 
 
 # ------------------------------------------------------------------------------
@@ -186,6 +201,9 @@ def test_fam_array_items_c():
     fam2 = FrozenAutoMap(fam1)
     assert list(fam2.items()) == [("a", 0), ("b", 1), ("c", 2)]
     assert list(fam1.items()) == [("a", 0), ("b", 1), ("c", 2)]
+
+
+# ------------------------------------------------------------------------------
 
 
 def test_am_array_constructor_a():

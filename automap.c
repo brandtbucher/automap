@@ -148,22 +148,15 @@ typedef struct {
 # define LOAD 0.9
 # define SCAN 16
 
-
-// could store all Table components together, but would need to dynamically alloc the full struct
-// typedef struct {
-//     TableElement *table;
-//     Py_ssize_t table_size;
-// } HashTable;
-
-
-// could record dtype kind to possibly screen out object types from comparisions with a isinstnace checks... though that might be more coslty then doing the comparison
-
 typedef enum {
     KAT_LIST = 0, // must be falsy
     KAT_INT8 = 1,
     KAT_INT16 = 2,
     KAT_INT32 = 3,
     KAT_INT64 = 4,
+    KAT_FLOAT16 = 5,
+    KAT_FLOAT32 = 6,
+    KAT_FLOAT64 = 7,
 } KeysArrayType;
 
 typedef struct {
@@ -597,14 +590,14 @@ famv_new(FAMObject *fam, int kind)
     return (PyObject *)famv;
 }
 
-// Given a key and a computed hash, return the table_pos if that hash and key are found.
+// Given a key and a computed hash, return the table_pos if that hash and key are found. Return -1 on error.
 static Py_ssize_t
 lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 {
     TableElement *table = self->table;
     Py_ssize_t mask = self->table_size - 1;
     Py_hash_t mixin = Py_ABS(hash);
-    Py_ssize_t table_pos = hash & mask; // taking the modulo
+    Py_ssize_t table_pos = hash & mask;
 
     PyObject **keys = NULL;
     keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
@@ -650,9 +643,6 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
 
     int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
-    // DEBUG_MSG_OBJ("in lookup_has_int64: keys", self->keys);
-    // DEBUG_MSG_OBJ("in lookup_has_int64: key", PyLong_FromSsize_t(key));
-
     npy_int64 k = 0;
 
     while (1) {
@@ -679,6 +669,57 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
                 case KAT_INT8:
                     k = *(npy_int8*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
                     break;
+                default:
+                    return -1;
+            }
+            result = key == k;
+
+            if (result) { // Hit.
+                return table_pos;
+            }
+            table_pos++;
+        }
+        table_pos = (5 * (table_pos - SCAN) + (mixin >>= 1) + 1) & mask;
+    }
+}
+
+static Py_ssize_t
+lookup_hash_float(FAMObject *self, npy_double key)
+{
+    Py_hash_t hash = 0; // temp
+
+    TableElement *table = self->table;
+    Py_ssize_t mask = self->table_size - 1;
+    Py_hash_t mixin = Py_ABS(hash);
+    Py_ssize_t table_pos = hash & mask;
+
+    int result = -1;
+    PyArrayObject *a = (PyArrayObject *)self->keys;
+    npy_double k = 0;
+
+    while (1) {
+        for (Py_ssize_t i = 0; i < SCAN; i++) {
+            Py_hash_t h = table[table_pos].hash;
+            if (h == -1) { // Miss. Found a position that can be used for insertion.
+                return table_pos;
+            }
+            if (h != hash) { // Collision.
+                table_pos++;
+                continue;
+            }
+            // if array is an int array, can skip creating scalar and compare directly
+            switch (self->keys_array_type) {
+                case KAT_FLOAT64:
+                    k = *(npy_double*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+                    break;
+                case KAT_FLOAT32:
+                    k = *(npy_float*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+                    break;
+                case KAT_FLOAT16:
+                    k = *(npy_half*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+                    break;
+                default:
+                    return -1;
             }
             result = key == k;
 
@@ -692,16 +733,14 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
 }
 
 
-
 // Given a key, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
 static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
     Py_ssize_t table_pos;
-    Py_ssize_t v;
 
-    if (self->keys_array_type) {
+    if (self->keys_array_type >= KAT_INT8 && self->keys_array_type <= KAT_INT64) {
+        Py_ssize_t v;
         if (PyFloat_Check(key)) {
-            // NOTE: this works for floats or others, might set error
             double dv = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
@@ -721,6 +760,24 @@ lookup(FAMObject *self, PyObject *key) {
             }
         }
         table_pos = lookup_hash_int(self, v);
+    }
+    if (self->keys_array_type >= KAT_FLOAT16 && self->keys_array_type <= KAT_FLOAT64) {
+        double v;
+        if (PyFloat_Check(key)) {
+            v = PyFloat_AsDouble(key);
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                return -1;
+            }
+        }
+        else {
+            v = (double)PyNumber_AsSsize_t(key, PyExc_OverflowError);
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                return -1;
+            }
+        }
+        table_pos = lookup_hash_float(self, v);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -782,6 +839,26 @@ insert_int(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
     self->table[table_pos].hash = key; // key is the hash
     return 0;
 }
+
+static int
+insert_float(FAMObject *self, npy_double key, Py_ssize_t keys_pos)
+{
+    // table position is not dependent on keys_pos
+    Py_ssize_t table_pos;
+    table_pos = lookup_hash_float(self, key);
+
+    if (table_pos < 0) {
+        return -1;
+    }
+    if (self->table[table_pos].hash != -1) {
+        PyErr_SetObject(NonUniqueError, PyLong_FromSsize_t(key));
+        return -1;
+    }
+    self->table[table_pos].keys_pos = keys_pos;
+    self->table[table_pos].hash = 0; // temp!
+    return 0;
+}
+
 
 // Called in fam_new(), extend(), append(), with the size of observed keys. This table is updated only when append or extending. Only if there is an old table will keys be accessed Returns 0 on success, -1 on failure.
 static int
@@ -1173,25 +1250,37 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         }
         int array_t = PyArray_TYPE(a);
         int is_i = PyTypeNum_ISSIGNED(array_t);
+        int is_f = PyTypeNum_ISFLOAT(array_t);
+
         // int is_U = array_t == NPY_UNICODE;
 
-        if (cls != &AMType && is_i) {
+        if (cls != &AMType && (is_i || is_f)) {
             if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {
                 PyErr_Format(PyExc_TypeError, "integer, unicode Arrays must be immutable when given to a %s", name);
                 return NULL;
             }
             switch (array_t) {
-                case NPY_INT8:
-                    keys_array_type = KAT_INT8;
-                    break;
-                case NPY_INT16:
-                    keys_array_type = KAT_INT16;
+                case NPY_INT64:
+                    keys_array_type = KAT_INT64;
                     break;
                 case NPY_INT32:
                     keys_array_type = KAT_INT32;
                     break;
-                case NPY_INT64:
-                    keys_array_type = KAT_INT64;
+                case NPY_INT16:
+                    keys_array_type = KAT_INT16;
+                    break;
+                case NPY_INT8:
+                    keys_array_type = KAT_INT8;
+                    break;
+
+                case NPY_FLOAT64:
+                    keys_array_type = KAT_FLOAT64;
+                    break;
+                case NPY_FLOAT32:
+                    keys_array_type = KAT_FLOAT32;
+                    break;
+                case NPY_FLOAT16:
+                    keys_array_type = KAT_FLOAT16;
                     break;
             }
             Py_INCREF(keys);
@@ -1237,25 +1326,52 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     Py_ssize_t i = 0;
     if (keys_array_type) {
         PyArrayObject *a = (PyArrayObject *)self->keys;
-        npy_int64 v = 0;
         for (; i < keys_size; i++) {
             switch (keys_array_type) {
                 case KAT_INT64:
-                    v = *(npy_int64*)PyArray_GETPTR1(a, i);
+                    if (insert_int(self, *(npy_int64*)PyArray_GETPTR1(a, i), i)) {
+                        Py_DECREF(self);
+                        return NULL;
+                    }
                     break;
                 case KAT_INT32:
-                    v = *(npy_int32*)PyArray_GETPTR1(a, i);
+                    if (insert_int(self, *(npy_int32*)PyArray_GETPTR1(a, i), i)) {
+                        Py_DECREF(self);
+                        return NULL;
+                    }
                     break;
                 case KAT_INT16:
-                    v = *(npy_int16*)PyArray_GETPTR1(a, i);
+                    if (insert_int(self, *(npy_int16*)PyArray_GETPTR1(a, i), i)) {
+                        Py_DECREF(self);
+                        return NULL;
+                    }
                     break;
                 case KAT_INT8:
-                    v = *(npy_int8*)PyArray_GETPTR1(a, i);
+                    if (insert_int(self, *(npy_int8*)PyArray_GETPTR1(a, i), i)) {
+                        Py_DECREF(self);
+                        return NULL;
+                    }
                     break;
-            }
-            if (insert_int(self, v, i)) {
-                Py_DECREF(self);
-                return NULL;
+
+                case KAT_FLOAT64:
+                    if (insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i)) {
+                        Py_DECREF(self);
+                        return NULL;
+                    }
+                    break;
+                case KAT_FLOAT32:
+                    if (insert_float(self, *(npy_float*)PyArray_GETPTR1(a, i), i)) {
+                        Py_DECREF(self);
+                        return NULL;
+                    }
+                    break;
+                case KAT_FLOAT16:
+                    if (insert_float(self, *(npy_half*)PyArray_GETPTR1(a, i), i)) {
+                        Py_DECREF(self);
+                        return NULL;
+                    }
+                    break;
+
             }
         }
     }
