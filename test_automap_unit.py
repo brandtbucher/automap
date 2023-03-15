@@ -30,10 +30,22 @@ def test_fam_contains():
     assert len(x) == 0
 
 
-def test_fam_constructor_array_a():
+def test_fam_constructor_array_a1():
     a1 = np.array((10, 20, 30), dtype=np.int64)
     with pytest.raises(TypeError):
         fam = FrozenAutoMap(a1)
+
+
+def test_fam_constructor_array_a2():
+    a1 = np.array((10, 20, 30), dtype=np.int32)
+    with pytest.raises(TypeError):
+        fam = FrozenAutoMap(a1)
+
+
+# def test_fam_constructor_array_a3():
+#     a1 = np.array(("a", "bb", "ccc"))
+#     with pytest.raises(TypeError):
+#         fam = FrozenAutoMap(a1)
 
 
 def test_fam_constructor_array_b():
@@ -77,8 +89,18 @@ def test_fam_array_get_a():
     assert fam.get(1) == 0
     assert fam.get(True) == 0
     assert fam.get(a1[2]) == 2
+    assert fam.get(1.0) == 0
 
-    # does not work yet
+
+def test_fam_array_get_b():
+    a1 = np.array((1, 100, 300, 4000), dtype=np.int32)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1) == 0
+    assert fam.get(True) == 0
+    assert fam.get(a1[2]) == 2
     assert fam.get(1.0) == 0
 
 
@@ -146,16 +168,8 @@ def test_am_array_constructor_b():
     am1 = AutoMap(a1)
     assert am1[np.datetime64("2023-05")] == 1
 
+
 def test_am_array_constructor_c():
-    a1 = np.array((10, 20, 30, 40), dtype=np.int64)
-    a1.flags.writeable = False
-    am = AutoMap(a1)
-    am.update((60, 80))
-    am.add(90)
-    assert list(am.keys()) == [10, 20, 30, 40, 60, 80, 90]
-
-
-def test_am_array_raises():
     a1 = np.array((10, 20, 30, 40), dtype=np.int64)
     a1.flags.writeable = False
     am = AutoMap(a1)

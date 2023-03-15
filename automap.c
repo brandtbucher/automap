@@ -157,22 +157,21 @@ typedef struct {
 
 
 // could record dtype kind to possibly screen out object types from comparisions with a isinstnace checks... though that might be more coslty then doing the comparison
-// ARRAY_b,
-// ARRAY_i, // signed int
-// ARRAY_u, // unsigned int
-// ARRAY_f,
-// ARRAY_c,
-// ARRAY_M, // datetime
-// ARRAY_O,
-// ARRAY_S, // bytes
-// ARRAY_U, // unicode
+
+typedef enum {
+    LIST = 0, // must be falsy
+    INT8 = 1,
+    INT16 = 2,
+    INT32 = 3,
+    INT64 = 4,
+} KeysArrayType;
 
 typedef struct {
     PyObject_VAR_HEAD
     Py_ssize_t table_size;
     TableElement *table;    // an array of TableElement structs
     PyObject *keys;
-    int keys_is_array;
+    KeysArrayType keys_array_type;
     Py_ssize_t keys_size;
 } FAMObject;
 
@@ -291,7 +290,7 @@ fami_iternext(FAMIObject *self)
     }
     switch (self->kind) {
         case ITEMS: {
-            if (self->fam->keys_is_array) {
+            if (self->fam->keys_array_type) {
 
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
                 // assuming a non-borrowed reference from array
@@ -314,7 +313,7 @@ fami_iternext(FAMIObject *self)
             }
         }
         case KEYS: {
-            if (self->fam->keys_is_array) {
+            if (self->fam->keys_array_type) {
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
                 return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
                 // return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
@@ -382,7 +381,7 @@ fami_new(FAMObject *fam, ViewKind kind, int reversed)
     }
     Py_INCREF(fam);
     fami->fam = fam;
-    if (!fam->keys_is_array) {
+    if (!fam->keys_array_type) {
         fami->keys_fast = PySequence_Fast_ITEMS(fam->keys);
     }
     else {
@@ -613,11 +612,15 @@ lookup_hash_int64(FAMObject *self, npy_int64 key)
 
     int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
+    DEBUG_MSG_OBJ("in lookup_has_int64: keys", self->keys);
+    DEBUG_MSG_OBJ("in lookup_has_int64: key", PyLong_FromSsize_t(key));
+
+    npy_int64 k = 0;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             Py_hash_t h = table[table_pos].hash;
-            if (h == -1) { // Miss. Found an unassigned position that can be assigned for insertion.
+            if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
             if (h != key) { // Collision.
@@ -625,7 +628,16 @@ lookup_hash_int64(FAMObject *self, npy_int64 key)
                 continue;
             }
             // if array is an int array, can skip creating scalar and compare directly
-            result = key == *(npy_int64*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+            switch (self->keys_array_type) {
+                case INT64:
+                    k = *(npy_int64*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+                    break;
+                case INT32:
+                    k = *(npy_int32*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+                    break;
+            }
+            DEBUG_MSG_OBJ("array extraction in hash lookup", PyLong_FromSsize_t(k));
+            result = key == k;
 
             if (result) { // Hit.
                 return table_pos;
@@ -644,7 +656,7 @@ lookup(FAMObject *self, PyObject *key) {
     Py_ssize_t table_pos;
     Py_ssize_t v;
 
-    if (self->keys_is_array) {
+    if (self->keys_array_type) {
         if (PyFloat_Check(key)) {
             // NOTE: this works for floats or others, might set error
             double dv = PyFloat_AsDouble(key);
@@ -654,7 +666,6 @@ lookup(FAMObject *self, PyObject *key) {
             }
             v = (Py_ssize_t)dv;
             if (v != dv) {
-                DEBUG_MSG_OBJ("could not convert", key);
                 return -1;
             }
         }
@@ -770,7 +781,7 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
     // if we have an old table, move them into the new table
     if (size_old) {
 
-        if (self->keys_is_array) {
+        if (self->keys_array_type) {
             PyErr_SetString(PyExc_NotImplementedError, "Cannot grow table for array keys");
             return -1;
         }
@@ -805,7 +816,7 @@ copy(PyTypeObject *cls, FAMObject *self)
         return self;
     }
     PyObject *keys = NULL;
-    if (self->keys_is_array) {
+    if (self->keys_array_type) {
         keys = self->keys;
         // assume we do not need to incref as fam_new does
         // Py_INCREF(keys);
@@ -827,7 +838,7 @@ copy(PyTypeObject *cls, FAMObject *self)
     key_count_global += self->keys_size;
     new->keys = keys;
     new->table_size = self->table_size;
-    new->keys_is_array = self->keys_is_array;
+    new->keys_array_type = self->keys_array_type;
     new->keys_size = self->keys_size;
 
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
@@ -844,7 +855,7 @@ copy(PyTypeObject *cls, FAMObject *self)
 static int
 extend(FAMObject *self, PyObject *keys)
 {
-    if (self->keys_is_array) {
+    if (self->keys_array_type) {
         PyErr_SetString(PyExc_NotImplementedError, "Not supported for array keys");
         return -1;
     }
@@ -881,7 +892,7 @@ extend(FAMObject *self, PyObject *keys)
 static int
 append(FAMObject *self, PyObject *key)
 {
-    if (self->keys_is_array) {
+    if (self->keys_array_type) {
         PyErr_SetString(PyExc_NotImplementedError, "Not supported for array keys");
         return -1;
     }
@@ -1104,7 +1115,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    int keys_is_array = 0;
+    int keys_array_type = LIST;
 
     if (!keys) {
         keys = PyList_New(0);
@@ -1113,28 +1124,45 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return (PyObject *)copy(cls, (FAMObject *)keys);
     }
     else if (PyArray_Check(keys)) {
-        if (PyArray_NDIM((PyArrayObject *)keys) != 1) {
+        PyArrayObject *a = (PyArrayObject *)keys;
+
+        if (PyArray_NDIM(a) != 1) {
             PyErr_SetString(PyExc_TypeError, "Arrays must be 1-dimensional");
             return NULL;
         }
-        int array_t = PyArray_TYPE((PyArrayObject *)keys);
+        int array_t = PyArray_TYPE(a);
+        int is_i = PyTypeNum_ISSIGNED(array_t);
+        // int is_U = array_t == NPY_UNICODE;
 
-        if (cls == &AMType || array_t != NPY_INT64) {
-            // if an automap, create and own the list
-            if (array_t == NPY_DATETIME || array_t == NPY_TIMEDELTA){
-                keys = PySequence_List(keys); // force iteration of scalars
-            }
-            else { // calling tolist() converts to objs
-                keys = PyArray_ToList((PyArrayObject *)keys);
-            }
-        }
-        else {
-            if ((PyArray_FLAGS((PyArrayObject *)keys) & NPY_ARRAY_WRITEABLE)) {
-                PyErr_SetString(PyExc_TypeError, "int64 Arrays must be immutable");
+        if (cls != &AMType && is_i) {
+            if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {
+                PyErr_Format(PyExc_TypeError, "integer, unicode Arrays must be immutable when given to a %s", name);
                 return NULL;
             }
-            keys_is_array = 1;
+            switch (array_t) {
+                case NPY_INT8:
+                    keys_array_type = INT8;
+                    break;
+                case NPY_INT16:
+                    keys_array_type = INT16;
+                    break;
+                case NPY_INT32:
+                    keys_array_type = INT32;
+                    break;
+                case NPY_INT64:
+                    keys_array_type = INT64;
+                    break;
+            }
             Py_INCREF(keys);
+        }
+        else {
+            // if an AutoMap, or if an array type that we do not custom-hash, then we create a list
+            if (array_t == NPY_DATETIME || array_t == NPY_TIMEDELTA){
+                keys = PySequence_List(keys); // force scalars
+            }
+            else { // calling tolist() converts to objs
+                keys = PyArray_ToList(a);
+            }
         }
     }
     else { // assume an arbitrary iterable
@@ -1152,9 +1180,9 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     }
 
     self->keys = keys;
-    self->keys_is_array = keys_is_array;
+    self->keys_array_type = keys_array_type;
 
-    Py_ssize_t keys_size = keys_is_array
+    Py_ssize_t keys_size = keys_array_type
         ? PyArray_SIZE((PyArrayObject *)keys)
         : PyList_GET_SIZE(keys);
     self->keys_size = keys_size;
@@ -1166,13 +1194,18 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return NULL;
     }
     Py_ssize_t i = 0;
-    if (keys_is_array) {
+    if (keys_array_type) {
         PyArrayObject *a = (PyArrayObject *)self->keys;
+        npy_int64 v = 0;
         for (; i < keys_size; i++) {
-            // use PyArray_ToScalar, not PyArray_GETITEM, to get NumPy types, essential for datetime64
-            // NOTE: might store PyArray_GETPTR1(a, i) result as the keys_pos and avoid lookup later; problem is that we use the same position to read from int_cache
-            // v = PyArray_ToScalar(PyArray_GETPTR1(a, i), a);
-            npy_int64 v = *(npy_int64*)PyArray_GETPTR1(a, i);
+            switch (keys_array_type) {
+                case INT64:
+                    v = *(npy_int64*)PyArray_GETPTR1(a, i);
+                    break;
+                case INT32:
+                    v = *(npy_int32*)PyArray_GETPTR1(a, i);
+                    break;
+            }
             if (insert_int64(self, v, i)) {
                 Py_DECREF(self);
                 return NULL;

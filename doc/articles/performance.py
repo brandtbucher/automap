@@ -277,12 +277,22 @@ class FixtureFactory:
         return cls.NAME, array
 
 
-class FFInt(FixtureFactory):
+class FFInt64(FixtureFactory):
     NAME = "int64"
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = np.arange(size)
+        array = np.arange(size, dtype=np.int64)
+        array.flags.writeable = False
+        return array
+
+
+class FFInt32(FixtureFactory):
+    NAME = "int32"
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.arange(size, dtype=np.int32)
         array.flags.writeable = False
         return array
 
@@ -346,7 +356,8 @@ CLS_PROCESSOR = (
 )
 
 CLS_FF = (
-    FFInt,
+    FFInt32,
+    FFInt64,
     FFFloat,
     FFString,
     FFObject,
@@ -355,7 +366,7 @@ CLS_FF = (
 
 def run_test():
     records = []
-    for size in (1_000, 10_000, 100_000):
+    for size in (100, 10_000, 1_000_000):
         for ff in CLS_FF:
             fixture_label, fixture = ff.get_label_array(size)
             for cls in CLS_PROCESSOR:
