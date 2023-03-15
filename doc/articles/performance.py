@@ -161,7 +161,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 10
+NUMBER = 50
 
 from itertools import product
 
@@ -249,8 +249,8 @@ def plot_performance(frame):
         bottom=0.05,
         right=0.80,
         top=0.80,
-        wspace=0.6,  # width
-        hspace=0.5,
+        wspace=0.7,  # width
+        hspace=0.4,
     )
     # plt.rcParams.update({'font.size': 22})
     plt.savefig(fp, dpi=300)
