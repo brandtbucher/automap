@@ -110,7 +110,7 @@ objects from value lookups), but the hardware-friendly hash table design is what
 really gives us our awesome performance.
 
 *******************************************************************************/
-
+# include <math.h>
 # define PY_SSIZE_T_CLEAN
 # include "Python.h"
 
@@ -182,6 +182,57 @@ typedef enum {
     VALUES,
 } ViewKind;
 
+
+#define HASH_MODULUS (((size_t)1 << 61) - 1)
+#define HASH_BITS 61
+
+Py_hash_t
+double_to_hash(double v)
+{
+    int e, sign;
+    double m;
+    Py_uhash_t x, y;
+
+    if (isinf(v)) {
+        return v > 0 ? 314159 : -314159;
+    }
+    if (isnan(v)) {
+        return 0;
+    }
+    m = frexp(v, &e);
+    sign = 1;
+    if (m < 0) {
+        sign = -1;
+        m = -m;
+    }
+    x = 0;
+    while (m) {
+        x = ((x << 28) & HASH_MODULUS) | x >> (HASH_BITS - 28);
+        m *= 268435456.0;  /* 2**28 */
+        e -= 28;
+        y = (Py_uhash_t)m;  /* pull out integer part */
+        m -= y;
+        x += y;
+        if (x >= HASH_MODULUS)
+            x -= HASH_MODULUS;
+    }
+    e = e >= 0 ? e % HASH_BITS : HASH_BITS-1-((-1-e) % HASH_BITS);
+    x = ((x << e) & HASH_MODULUS) | x >> (HASH_BITS - e);
+    x = x * sign;
+    if (x == (Py_uhash_t)-1)
+        x = (Py_uhash_t)-2;
+    return (Py_hash_t)x;
+}
+
+Py_hash_t char_to_hash(const char *str, size_t len) {
+    const Py_hash_t FNV_OFFSET_BASIS = 0x811c9dc5;
+    const Py_hash_t FNV_PRIME = 0x01000193;
+    Py_hash_t hash = FNV_OFFSET_BASIS;
+    for (size_t i = 0; i < len; i++) {
+        hash = (hash * FNV_PRIME) ^ str[i];
+    }
+    return hash;
+}
 
 //------------------------------------------------------------------------------
 // the global int_cache is shared among all instances
@@ -731,58 +782,6 @@ insert_int(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
     self->table[table_pos].hash = key; // key is the hash
     return 0;
 }
-
-// #define _PyHASH_INF 314159
-// #define _PyHASH_MODULUS (((size_t)1 << _PyHASH_BITS) - 1)
-// _PyHASH_BITS 61
-
-// Py_hash_t
-// _Py_HashDouble(PyObject *inst, double v)
-// {
-//     int e, sign;
-//     double m;
-//     Py_uhash_t x, y;
-
-//     if (!Py_IS_FINITE(v)) {
-//         if (Py_IS_INFINITY(v))
-//             return v > 0 ? _PyHASH_INF : -_PyHASH_INF;
-//         else
-//             return _Py_HashPointer(inst);
-//     }
-
-//     m = frexp(v, &e);
-
-//     sign = 1;
-//     if (m < 0) {
-//         sign = -1;
-//         m = -m;
-//     }
-
-//     /* process 28 bits at a time;  this should work well both for binary
-//        and hexadecimal floating point. */
-//     x = 0;
-//     while (m) {
-//         x = ((x << 28) & _PyHASH_MODULUS) | x >> (_PyHASH_BITS - 28);
-//         m *= 268435456.0;  /* 2**28 */
-//         e -= 28;
-//         y = (Py_uhash_t)m;  /* pull out integer part */
-//         m -= y;
-//         x += y;
-//         if (x >= _PyHASH_MODULUS)
-//             x -= _PyHASH_MODULUS;
-//     }
-
-//     /* adjust for the exponent;  first reduce it modulo _PyHASH_BITS */
-//     e = e >= 0 ? e % _PyHASH_BITS : _PyHASH_BITS-1-((-1-e) % _PyHASH_BITS);
-//     x = ((x << e) & _PyHASH_MODULUS) | x >> (_PyHASH_BITS - e);
-
-//     x = x * sign;
-//     if (x == (Py_uhash_t)-1)
-//         x = (Py_uhash_t)-2;
-//     return (Py_hash_t)x;
-// }
-
-
 
 // Called in fam_new(), extend(), append(), with the size of observed keys. This table is updated only when append or extending. Only if there is an old table will keys be accessed Returns 0 on success, -1 on failure.
 static int
