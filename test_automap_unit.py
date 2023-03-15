@@ -105,6 +105,7 @@ def test_fam_array_get_b():
     assert fam.get(True) == 0
     assert fam.get(a1[2]) == 2
     assert fam.get(1.0) == 0
+    assert fam.get(1.1) is None
 
 
 def test_fam_array_get_c():
@@ -129,6 +130,7 @@ def test_fam_array_get_d():
     assert fam.get(True) == 0
     assert fam.get(a1[2]) == 2
     assert fam.get(20.0) == 3
+    assert fam.get(20.1) is None
 
 
 # ------------------------------------------------------------------------------
