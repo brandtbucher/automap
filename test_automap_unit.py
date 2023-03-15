@@ -80,6 +80,9 @@ def test_fam_array_len_b():
     assert fam[40] == 3
 
 
+# ------------------------------------------------------------------------------
+
+
 def test_fam_array_get_a():
     a1 = np.array((1, 100, 300, 4000), dtype=np.int64)
     a1.flags.writeable = False
@@ -102,6 +105,33 @@ def test_fam_array_get_b():
     assert fam.get(True) == 0
     assert fam.get(a1[2]) == 2
     assert fam.get(1.0) == 0
+
+
+def test_fam_array_get_c():
+    a1 = np.array((1, 5, 10, 20), dtype=np.int16)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1) == 0
+    assert fam.get(True) == 0
+    assert fam.get(a1[2]) == 2
+    assert fam.get(20.0) == 3
+
+
+def test_fam_array_get_d():
+    a1 = np.array((1, 5, 10, 20), dtype=np.int8)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1) == 0
+    assert fam.get(True) == 0
+    assert fam.get(a1[2]) == 2
+    assert fam.get(20.0) == 3
+
+
+# ------------------------------------------------------------------------------
 
 
 def test_fam_array_values_a():

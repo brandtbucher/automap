@@ -211,12 +211,6 @@ int_cache_fill(Py_ssize_t size_needed)
         }
         Py_DECREF(item);
     }
-
-    // Py_ssize_t ics = PyList_GET_SIZE(int_cache);
-    // PyObject* icso = PyLong_FromSsize_t(ics);
-    // DEBUG_MSG_OBJ("int_cache_fill()", icso);
-    // Py_DECREF(icso);
-
     return 0;
 }
 
@@ -231,13 +225,6 @@ int_cache_remove(Py_ssize_t key_count)
         // del int_cache[key_count:]
         PyList_SetSlice(int_cache, key_count, PyList_GET_SIZE(int_cache), NULL);
     }
-
-    // if (int_cache) {
-    //     Py_ssize_t ics = PyList_GET_SIZE(int_cache);
-    //     PyObject* icso = PyLong_FromSsize_t(ics);
-    //     DEBUG_MSG_OBJ("int_cache_remove()", icso);
-    //     Py_DECREF(icso);
-    // }
 }
 
 
@@ -603,7 +590,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 
 
 static Py_ssize_t
-lookup_hash_int64(FAMObject *self, npy_int64 key)
+lookup_hash_int(FAMObject *self, npy_int64 key)
 {
     TableElement *table = self->table;
     Py_ssize_t mask = self->table_size - 1;
@@ -612,8 +599,8 @@ lookup_hash_int64(FAMObject *self, npy_int64 key)
 
     int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
-    DEBUG_MSG_OBJ("in lookup_has_int64: keys", self->keys);
-    DEBUG_MSG_OBJ("in lookup_has_int64: key", PyLong_FromSsize_t(key));
+    // DEBUG_MSG_OBJ("in lookup_has_int64: keys", self->keys);
+    // DEBUG_MSG_OBJ("in lookup_has_int64: key", PyLong_FromSsize_t(key));
 
     npy_int64 k = 0;
 
@@ -635,8 +622,13 @@ lookup_hash_int64(FAMObject *self, npy_int64 key)
                 case INT32:
                     k = *(npy_int32*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
                     break;
+                case INT16:
+                    k = *(npy_int16*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+                    break;
+                case INT8:
+                    k = *(npy_int8*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+                    break;
             }
-            DEBUG_MSG_OBJ("array extraction in hash lookup", PyLong_FromSsize_t(k));
             result = key == k;
 
             if (result) { // Hit.
@@ -677,7 +669,7 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        table_pos = lookup_hash_int64(self, v);
+        table_pos = lookup_hash_int(self, v);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -722,11 +714,11 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
 }
 
 static int
-insert_int64(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
+insert_int(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
 {
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos;
-    table_pos = lookup_hash_int64(self, key);
+    table_pos = lookup_hash_int(self, key);
 
     if (table_pos < 0) {
         return -1;
@@ -1205,8 +1197,14 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                 case INT32:
                     v = *(npy_int32*)PyArray_GETPTR1(a, i);
                     break;
+                case INT16:
+                    v = *(npy_int16*)PyArray_GETPTR1(a, i);
+                    break;
+                case INT8:
+                    v = *(npy_int8*)PyArray_GETPTR1(a, i);
+                    break;
             }
-            if (insert_int64(self, v, i)) {
+            if (insert_int(self, v, i)) {
                 Py_DECREF(self);
                 return NULL;
             }
