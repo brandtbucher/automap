@@ -732,6 +732,30 @@ insert_int(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
     return 0;
 }
 
+// how Python hashes floats
+// static Py_hash_t
+// float_hash(PyFloatObject *v)
+// {
+//     return _Py_HashDouble((PyObject *)v, v->ob_fval);
+// }
+
+// and unicode
+// static Py_hash_t
+// unicode_hash(PyObject *self)
+// {
+//     Py_uhash_t x;  /* Unsigned for defined overflow behavior. */
+
+// #ifdef Py_DEBUG
+//     assert(_Py_HashSecret_Initialized);
+// #endif
+//     if (_PyUnicode_HASH(self) != -1)
+//         return _PyUnicode_HASH(self);
+
+//     x = _Py_HashBytes(PyUnicode_DATA(self),
+//                       PyUnicode_GET_LENGTH(self) * PyUnicode_KIND(self));
+//     _PyUnicode_HASH(self) = x;
+//     return x;
+
 
 
 // Called in fam_new(), extend(), append(), with the size of observed keys. This table is updated only when append or extending. Only if there is an old table will keys be accessed Returns 0 on success, -1 on failure.
