@@ -159,11 +159,11 @@ typedef struct {
 // could record dtype kind to possibly screen out object types from comparisions with a isinstnace checks... though that might be more coslty then doing the comparison
 
 typedef enum {
-    LIST = 0, // must be falsy
-    INT8 = 1,
-    INT16 = 2,
-    INT32 = 3,
-    INT64 = 4,
+    KAT_LIST = 0, // must be falsy
+    KAT_INT8 = 1,
+    KAT_INT16 = 2,
+    KAT_INT32 = 3,
+    KAT_INT64 = 4,
 } KeysArrayType;
 
 typedef struct {
@@ -616,16 +616,16 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
             }
             // if array is an int array, can skip creating scalar and compare directly
             switch (self->keys_array_type) {
-                case INT64:
+                case KAT_INT64:
                     k = *(npy_int64*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
                     break;
-                case INT32:
+                case KAT_INT32:
                     k = *(npy_int32*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
                     break;
-                case INT16:
+                case KAT_INT16:
                     k = *(npy_int16*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
                     break;
-                case INT8:
+                case KAT_INT8:
                     k = *(npy_int8*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
                     break;
             }
@@ -1107,7 +1107,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    int keys_array_type = LIST;
+    int keys_array_type = KAT_LIST;
 
     if (!keys) {
         keys = PyList_New(0);
@@ -1133,16 +1133,16 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             }
             switch (array_t) {
                 case NPY_INT8:
-                    keys_array_type = INT8;
+                    keys_array_type = KAT_INT8;
                     break;
                 case NPY_INT16:
-                    keys_array_type = INT16;
+                    keys_array_type = KAT_INT16;
                     break;
                 case NPY_INT32:
-                    keys_array_type = INT32;
+                    keys_array_type = KAT_INT32;
                     break;
                 case NPY_INT64:
-                    keys_array_type = INT64;
+                    keys_array_type = KAT_INT64;
                     break;
             }
             Py_INCREF(keys);
@@ -1191,16 +1191,16 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         npy_int64 v = 0;
         for (; i < keys_size; i++) {
             switch (keys_array_type) {
-                case INT64:
+                case KAT_INT64:
                     v = *(npy_int64*)PyArray_GETPTR1(a, i);
                     break;
-                case INT32:
+                case KAT_INT32:
                     v = *(npy_int32*)PyArray_GETPTR1(a, i);
                     break;
-                case INT16:
+                case KAT_INT16:
                     v = *(npy_int16*)PyArray_GETPTR1(a, i);
                     break;
-                case INT8:
+                case KAT_INT8:
                     v = *(npy_int8*)PyArray_GETPTR1(a, i);
                     break;
             }
