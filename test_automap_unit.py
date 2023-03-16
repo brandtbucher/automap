@@ -148,6 +148,21 @@ def test_fam_array_float_get_a():
     assert fam.get(8.8) == 2
 
 
+def test_fam_array_float_get_b():
+    a1 = np.array((1.5, 10.2, 8.8), dtype=np.float32)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1.5) == 0
+
+    # NOTE: cannot yet lookup values from these floats; this is an unsolved problem but NumPy seems to be able to do it
+
+    # assert fam.get(10.2) == 1
+    # assert fam.get(a1[1]) == 1
+    # assert fam.get(8.8) == 2
+
+
 # ------------------------------------------------------------------------------
 
 

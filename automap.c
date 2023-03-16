@@ -720,7 +720,6 @@ lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
                     return -1;
             }
             result = key == k;
-
             if (result) { // Hit.
                 return table_pos;
             }
