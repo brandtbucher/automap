@@ -168,6 +168,33 @@ typedef enum {
     KAT_UNICODE = 12,
 } KeysArrayType;
 
+
+KeysArrayType
+at_to_kat(int array_t) {
+    switch (array_t) {
+        case NPY_INT64:
+            return KAT_INT64;
+        case NPY_INT32:
+            return KAT_INT32;
+        case NPY_INT16:
+            return KAT_INT16;
+        case NPY_INT8:
+            return KAT_INT8;
+
+        case NPY_FLOAT64:
+            return KAT_FLOAT64;
+        case NPY_FLOAT32:
+            return KAT_FLOAT32;
+        case NPY_FLOAT16:
+            return KAT_FLOAT16;
+
+        case NPY_UNICODE:
+            return KAT_UNICODE;
+        default:
+            return KAT_LIST;
+    }
+}
+
 typedef struct {
     PyObject_VAR_HEAD
     Py_ssize_t table_size;
@@ -175,6 +202,7 @@ typedef struct {
     PyObject *keys;
     KeysArrayType keys_array_type;
     Py_ssize_t keys_size;
+    Py_UCS4* key_buffer;
 } FAMObject;
 
 
@@ -498,7 +526,6 @@ famv_contains(FAMVObject *self, PyObject *other)
         return -1;
     }
     int result = PySequence_Contains(iterator, other);
-    // Py_DECREF(other); // previously we did this, which would segfault
     Py_DECREF(iterator);
     return result;
 }
@@ -739,6 +766,8 @@ lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
     }
 }
 
+
+// Copmare a passed Py_UCS4 array to stored keys. This does not use any dynamic memory. Returns -1 on error.
 static Py_ssize_t
 lookup_hash_unicode(
         FAMObject *self,
@@ -796,12 +825,13 @@ lookup_hash_unicode(
     }
 }
 
-// Given a key, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
+// Given a key as a PyObject, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
 static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
     Py_ssize_t table_pos;
 
-    if (self->keys_array_type >= KAT_INT8 && self->keys_array_type <= KAT_INT64) {
+    if (self->keys_array_type >= KAT_INT8
+            && self->keys_array_type <= KAT_INT64) {
         Py_ssize_t v;
         if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
@@ -809,7 +839,7 @@ lookup(FAMObject *self, PyObject *key) {
                 PyErr_Clear();
                 return -1;
             }
-            v = (Py_ssize_t)dv;
+            v = (Py_ssize_t)dv; // truncate to integer
             if (v != dv) {
                 return -1;
             }
@@ -848,6 +878,7 @@ lookup(FAMObject *self, PyObject *key) {
         if (!v) { // alloc error
             return -1;
         }
+        // rather than allocate on every call, explore storing on teh FAM
         Py_ssize_t v_size = PyUnicode_GetLength(key);
         Py_hash_t hash = UCS4_to_hash(v, v_size);
         table_pos = lookup_hash_unicode(self, v, v_size, hash);
@@ -1362,34 +1393,8 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                 PyErr_Format(PyExc_TypeError, "integer, unicode Arrays must be immutable when given to a %s", name);
                 return NULL;
             }
-            switch (array_t) {
-                case NPY_INT64:
-                    keys_array_type = KAT_INT64;
-                    break;
-                case NPY_INT32:
-                    keys_array_type = KAT_INT32;
-                    break;
-                case NPY_INT16:
-                    keys_array_type = KAT_INT16;
-                    break;
-                case NPY_INT8:
-                    keys_array_type = KAT_INT8;
-                    break;
-
-                case NPY_FLOAT64:
-                    keys_array_type = KAT_FLOAT64;
-                    break;
-                case NPY_FLOAT32:
-                    keys_array_type = KAT_FLOAT32;
-                    break;
-                case NPY_FLOAT16:
-                    keys_array_type = KAT_FLOAT16;
-                    break;
-
-                case NPY_UNICODE:
-                    keys_array_type = KAT_UNICODE;
-                    break;
-            }
+            keys_array_type = at_to_kat(array_t);
+            assert(keys_array_type); // must be truthy
             Py_INCREF(keys);
         }
         else {
