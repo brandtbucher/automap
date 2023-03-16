@@ -178,7 +178,6 @@ typedef enum {
 
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
 #define HASH_BITS 61
-
 Py_hash_t
 double_to_hash(double v)
 {
@@ -217,7 +216,9 @@ double_to_hash(double v)
     return (Py_hash_t)x;
 }
 
-Py_hash_t char_to_hash(const char *str, size_t len) {
+
+Py_hash_t
+char_to_hash(const char *str, size_t len) {
     const Py_hash_t FNV_OFFSET_BASIS = 0x811c9dc5;
     const Py_hash_t FNV_PRIME = 0x01000193;
     Py_hash_t hash = FNV_OFFSET_BASIS;

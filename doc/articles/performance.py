@@ -161,7 +161,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 100
+NUMBER = 1
 
 from itertools import product
 
