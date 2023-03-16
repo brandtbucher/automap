@@ -202,7 +202,6 @@ typedef struct {
     PyObject *keys;
     KeysArrayType keys_array_type;
     Py_ssize_t keys_size;
-    Py_UCS4* key_buffer;
 } FAMObject;
 
 
@@ -780,15 +779,20 @@ lookup_hash_unicode(
     Py_hash_t mixin = Py_ABS(hash);
     Py_ssize_t table_pos = hash & mask;
 
-    int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
 
-    Py_UCS4* k = NULL;
+
+    int result = -1;
+    Py_hash_t h = 0;
+    Py_UCS4* p_start = NULL;
+    Py_UCS4* p = NULL;
+    Py_UCS4* key_p = NULL;
+    Py_UCS4* p_end = NULL;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
-            Py_hash_t h = table[table_pos].hash;
+            h = table[table_pos].hash;
             if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
@@ -796,15 +800,13 @@ lookup_hash_unicode(
                 table_pos++;
                 continue;
             }
-
-            k = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
-
+            p_start = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
             result = 1;
-            Py_UCS4* p = k;
-            Py_UCS4* key_p = key;
+            p = p_start;
+            key_p = key;
             // scan the minimum of passed key size, or element size of the keys array
             // if the key is longer then p, we will identify nulls in p and break
-            Py_UCS4* p_end = k + (key_size < dt_size ? key_size : dt_size);
+            p_end = p_start + (key_size < dt_size ? key_size : dt_size);
             while (p < p_end && *p != '\0') {
                 if (*p != *key_p) {
                      result = 0;
@@ -813,7 +815,7 @@ lookup_hash_unicode(
                 p++;
                 key_p++;
             }
-            if (p - k != key_size) {
+            if (p - p_start != key_size) {
                 result = 0;
             }
             if (result) { // Hit.
@@ -844,8 +846,7 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else {
-            // NOTE: this works for ints and bools
+        else { // NOTE: this works for ints and bools
             v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
@@ -874,6 +875,7 @@ lookup(FAMObject *self, PyObject *key) {
         if (!PyUnicode_Check(key)) {
             return -1;
         }
+        // NOTE: could store a UCS4 buffer on fam to write into; would need to check that size is not bigger than known max size before copying
         Py_UCS4* v = PyUnicode_AsUCS4Copy(key); // new alloc, add null
         if (!v) { // alloc error
             return -1;
@@ -892,7 +894,7 @@ lookup(FAMObject *self, PyObject *key) {
         table_pos = lookup_hash(self, key, hash);
     }
 
-    // REVIEW: why would the table have a -1 as a hash at this index
+    // A -1 at this table position means that we found an unused storage location
     if ((table_pos < 0) || (self->table[table_pos].hash == -1)) {
         return -1;
     }
@@ -1397,8 +1399,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             assert(keys_array_type); // must be truthy
             Py_INCREF(keys);
         }
-        else {
-            // if an AutoMap, or if an array type that we do not custom-hash, then we create a list
+        else { // if an AutoMap, or if an array type that we do not custom-hash, then we create a list
             if (array_t == NPY_DATETIME || array_t == NPY_TIMEDELTA){
                 keys = PySequence_List(keys); // force scalars
             }
@@ -1488,9 +1489,10 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 
                 case KAT_UNICODE: {
                     Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
-                    // discover the size of this element, up to the max size possible, by incrementing pointer and then subtracting from start
+                    // discover the size of this element, up to the max size possible, by incrementing pointer and then subtracting from start on call to insert_unicode
                     Py_UCS4* p = v;
-                    while (p < (v + dt_size) && *p != '\0') {
+                    Py_UCS4* p_end = v + dt_size;
+                    while (p < p_end && *p != '\0') {
                         p++;
                     }
                     if (insert_unicode(self, v, p-v, i, -1)) {
