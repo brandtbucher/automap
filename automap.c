@@ -154,9 +154,14 @@ typedef enum {
     KAT_INT16 = 2,
     KAT_INT32 = 3,
     KAT_INT64 = 4,
-    KAT_FLOAT16 = 5,
-    KAT_FLOAT32 = 6,
-    KAT_FLOAT64 = 7,
+    KAT_UINT8 = 5,
+    KAT_UINT16 = 6,
+    KAT_UINT32 = 7,
+    KAT_UINT64 = 8,
+    KAT_FLOAT16 = 9,
+    KAT_FLOAT32 = 10,
+    KAT_FLOAT64 = 11,
+    KAT_UNICODE = 12,
 } KeysArrayType;
 
 typedef struct {
@@ -656,7 +661,6 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
                 table_pos++;
                 continue;
             }
-            // if array is an int array, can skip creating scalar and compare directly
             switch (self->keys_array_type) {
                 case KAT_INT64:
                     k = *(npy_int64*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
@@ -706,7 +710,6 @@ lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
                 table_pos++;
                 continue;
             }
-            // if array is an int array, can skip creating scalar and compare directly
             switch (self->keys_array_type) {
                 case KAT_FLOAT64:
                     k = *(npy_double*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
@@ -730,6 +733,62 @@ lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
     }
 }
 
+static Py_ssize_t
+lookup_hash_unicode(
+        FAMObject *self,
+        Py_UCS4* key,
+        Py_ssize_t key_size,
+        Py_hash_t hash)
+{
+    TableElement *table = self->table;
+    Py_ssize_t mask = self->table_size - 1;
+    Py_hash_t mixin = Py_ABS(hash);
+    Py_ssize_t table_pos = hash & mask;
+
+    int result = -1;
+    PyArrayObject *a = (PyArrayObject *)self->keys;
+    Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+
+    Py_UCS4* k = NULL;
+
+    while (1) {
+        for (Py_ssize_t i = 0; i < SCAN; i++) {
+            Py_hash_t h = table[table_pos].hash;
+            if (h == -1) { // Miss. Found a position that can be used for insertion.
+                return table_pos;
+            }
+            if (h != hash) { // Collision.
+                table_pos++;
+                continue;
+            }
+
+            k = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+
+            result = 1;
+            Py_UCS4* p = k;
+            Py_UCS4* key_p = key;
+            // scan the minimum of passed key size, or element size of the keys array
+            // if the key is longer then p, we will identify nulls in p and break
+            Py_UCS4* p_end = k + (key_size < dt_size ? key_size : dt_size);
+            while (p < p_end && *p != '\0') {
+                if (*p != *key_p) {
+                     result = 0;
+                     break;
+                }
+                p++;
+                key_p++;
+            }
+            if (p - k != key_size) {
+                result = 0;
+            }
+            if (result) { // Hit.
+                return table_pos;
+            }
+            table_pos++;
+        }
+        table_pos = (5 * (table_pos - SCAN) + (mixin >>= 1) + 1) & mask;
+    }
+}
 
 // Given a key, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
 static Py_ssize_t
@@ -759,7 +818,8 @@ lookup(FAMObject *self, PyObject *key) {
         }
         table_pos = lookup_hash_int(self, v);
     }
-    else if (self->keys_array_type >= KAT_FLOAT16 && self->keys_array_type <= KAT_FLOAT64) {
+    else if (self->keys_array_type >= KAT_FLOAT16
+            && self->keys_array_type <= KAT_FLOAT64) {
         double v;
         if (PyFloat_Check(key)) {
             v = PyFloat_AsDouble(key);
@@ -773,6 +833,19 @@ lookup(FAMObject *self, PyObject *key) {
         }
         Py_hash_t hash = double_to_hash(v);
         table_pos = lookup_hash_float(self, v, hash);
+    }
+    else if (self->keys_array_type == KAT_UNICODE) {
+        if (!PyUnicode_Check(key)) {
+            return -1;
+        }
+        Py_UCS4* v = PyUnicode_AsUCS4Copy(key); // new alloc, add null
+        if (!v) { // alloc error
+            return -1;
+        }
+        Py_ssize_t v_size = PyUnicode_GetLength(key);
+        Py_hash_t hash = 0; // TODO
+        table_pos = lookup_hash_unicode(self, v, v_size, hash);
+        PyMem_Free(v);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -849,7 +922,7 @@ insert_float(FAMObject *self, npy_double key, Py_ssize_t keys_pos, Py_hash_t has
         return -1;
     }
     if (self->table[table_pos].hash != -1) {
-        PyErr_SetObject(NonUniqueError, PyLong_FromSsize_t(key));
+        PyErr_SetObject(NonUniqueError, PyFloat_FromDouble(key));
         return -1;
     }
     self->table[table_pos].keys_pos = keys_pos;
@@ -857,6 +930,33 @@ insert_float(FAMObject *self, npy_double key, Py_ssize_t keys_pos, Py_hash_t has
     return 0;
 }
 
+
+static int
+insert_unicode(
+        FAMObject *self,
+        Py_UCS4* key,
+        Py_ssize_t key_size,
+        Py_ssize_t keys_pos,
+        Py_hash_t hash)
+{
+    if (hash == -1) {
+        hash = 0;
+    }
+    // table position is not dependent on keys_pos
+    Py_ssize_t table_pos;
+    table_pos = lookup_hash_unicode(self, key, key_size, hash);
+    if (table_pos < 0) {
+        return -1;
+    }
+    if (self->table[table_pos].hash != -1) {
+        PyErr_SetObject(NonUniqueError,
+            PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND, key, key_size));
+        return -1;
+    }
+    self->table[table_pos].keys_pos = keys_pos;
+    self->table[table_pos].hash = hash;
+    return 0;
+}
 
 // Called in fam_new(), extend(), append(), with the size of observed keys. This table is updated only when append or extending. Only if there is an old table will keys be accessed Returns 0 on success, -1 on failure.
 static int
@@ -1249,10 +1349,9 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         int array_t = PyArray_TYPE(a);
         int is_i = PyTypeNum_ISSIGNED(array_t);
         int is_f = PyTypeNum_ISFLOAT(array_t);
+        int is_U = array_t == NPY_UNICODE;
 
-        // int is_U = array_t == NPY_UNICODE;
-
-        if (cls != &AMType && (is_i || is_f)) {
+        if (cls != &AMType && (is_i || is_f || is_U)) {
             if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {
                 PyErr_Format(PyExc_TypeError, "integer, unicode Arrays must be immutable when given to a %s", name);
                 return NULL;
@@ -1279,6 +1378,10 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                     break;
                 case NPY_FLOAT16:
                     keys_array_type = KAT_FLOAT16;
+                    break;
+
+                case NPY_UNICODE:
+                    keys_array_type = KAT_UNICODE;
                     break;
             }
             Py_INCREF(keys);
@@ -1324,6 +1427,8 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     Py_ssize_t i = 0;
     if (keys_array_type) {
         PyArrayObject *a = (PyArrayObject *)self->keys;
+        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+
         for (; i < keys_size; i++) {
             switch (keys_array_type) {
                 case KAT_INT64:
@@ -1370,6 +1475,19 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                     }
                     break;
 
+                case KAT_UNICODE: {
+                    Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
+                    // discover the size of this element, up to the max size possible, by incrementing pointer and then subtracting from start
+                    Py_UCS4* p = v;
+                    while (p < (v + dt_size) && *p != '\0') {
+                        p++;
+                    }
+                    if (insert_unicode(self, v, p-v, i, -1)) {
+                        Py_DECREF(self);
+                        return NULL;
+                    }
+                    break;
+                }
             }
         }
     }

@@ -4,8 +4,7 @@ import numpy as np
 
 from automap import AutoMap
 from automap import FrozenAutoMap
-
-# from automap import NonUniqueError
+from automap import NonUniqueError
 
 
 def test_am_extend():
@@ -30,25 +29,46 @@ def test_fam_contains():
     assert len(x) == 0
 
 
-def test_fam_constructor_array_a1():
+# ------------------------------------------------------------------------------
+
+def test_fam_constructor_array_int_a1():
     a1 = np.array((10, 20, 30), dtype=np.int64)
     with pytest.raises(TypeError):
         fam = FrozenAutoMap(a1)
 
 
-def test_fam_constructor_array_a2():
+def test_fam_constructor_array_int_a2():
     a1 = np.array((10, 20, 30), dtype=np.int32)
     with pytest.raises(TypeError):
         fam = FrozenAutoMap(a1)
 
+def test_fam_constructor_array_int_b():
+    a1 = np.array((10, 20, 30, 40), dtype=np.int64).reshape(2, 2)
+    a1.flags.writeable = False
+    with pytest.raises(TypeError):
+        fam = FrozenAutoMap(a1)
 
 # def test_fam_constructor_array_a3():
 #     a1 = np.array(("a", "bb", "ccc"))
 #     with pytest.raises(TypeError):
 #         fam = FrozenAutoMap(a1)
 
+# ------------------------------------------------------------------------------
 
-def test_fam_constructor_array_b():
+
+def test_fam_constructor_array_float_a():
+    a1 = np.array((1.2, 8.8, 1.2))
+    a1.flags.writeable = False
+    with pytest.raises(NonUniqueError):
+        fam = FrozenAutoMap(a1)
+
+
+
+
+# ------------------------------------------------------------------------------
+
+
+def test_fam_constructor_array_dt64_a():
     a1 = np.array(("2022-01", "2023-05"), dtype=np.datetime64)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
@@ -56,11 +76,18 @@ def test_fam_constructor_array_b():
     # assert np.datetime64('2022-05') in a1
 
 
-def test_fam_constructor_array_c():
-    a1 = np.array((10, 20, 30, 40), dtype=np.int64).reshape(2, 2)
+# ------------------------------------------------------------------------------
+
+
+def test_fam_constructor_array_unicode_a():
+    a1 = np.array(('a', 'b', 'a'))
     a1.flags.writeable = False
-    with pytest.raises(TypeError):
+    with pytest.raises(NonUniqueError):
         fam = FrozenAutoMap(a1)
+
+
+
+# ------------------------------------------------------------------------------
 
 
 def test_fam_array_len_a():
@@ -161,6 +188,21 @@ def test_fam_array_float_get_b():
     # assert fam.get(10.2) == 1
     # assert fam.get(a1[1]) == 1
     # assert fam.get(8.8) == 2
+
+
+# ------------------------------------------------------------------------------
+
+
+def test_fam_array_unicode_get_a():
+    a1 = np.array(("bb", "a", "ccc"))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("a") == 1
+    assert fam.get("bb") == 0
+    assert fam.get("ccc") == 2
+    assert fam.get(None) is None
+    assert fam.get(3.2) is None
 
 
 # ------------------------------------------------------------------------------
