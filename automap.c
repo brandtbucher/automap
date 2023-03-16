@@ -684,10 +684,8 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
 }
 
 static Py_ssize_t
-lookup_hash_float(FAMObject *self, npy_double key)
+lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
 {
-    Py_hash_t hash = 0; // temp
-
     TableElement *table = self->table;
     Py_ssize_t mask = self->table_size - 1;
     Py_hash_t mixin = Py_ABS(hash);
@@ -761,23 +759,20 @@ lookup(FAMObject *self, PyObject *key) {
         }
         table_pos = lookup_hash_int(self, v);
     }
-    if (self->keys_array_type >= KAT_FLOAT16 && self->keys_array_type <= KAT_FLOAT64) {
+    else if (self->keys_array_type >= KAT_FLOAT16 && self->keys_array_type <= KAT_FLOAT64) {
         double v;
         if (PyFloat_Check(key)) {
             v = PyFloat_AsDouble(key);
-            if (PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
         }
         else {
             v = (double)PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
         }
-        table_pos = lookup_hash_float(self, v);
+        if (PyErr_Occurred()) {
+            PyErr_Clear();
+            return -1;
+        }
+        Py_hash_t hash = double_to_hash(v);
+        table_pos = lookup_hash_float(self, v, hash);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -841,11 +836,14 @@ insert_int(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
 }
 
 static int
-insert_float(FAMObject *self, npy_double key, Py_ssize_t keys_pos)
+insert_float(FAMObject *self, npy_double key, Py_ssize_t keys_pos, Py_hash_t hash)
 {
+    if (hash == -1) {
+        hash = double_to_hash(key);
+    }
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos;
-    table_pos = lookup_hash_float(self, key);
+    table_pos = lookup_hash_float(self, key, hash);
 
     if (table_pos < 0) {
         return -1;
@@ -855,7 +853,7 @@ insert_float(FAMObject *self, npy_double key, Py_ssize_t keys_pos)
         return -1;
     }
     self->table[table_pos].keys_pos = keys_pos;
-    self->table[table_pos].hash = 0; // temp!
+    self->table[table_pos].hash = hash;
     return 0;
 }
 
@@ -1354,19 +1352,19 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                     break;
 
                 case KAT_FLOAT64:
-                    if (insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i)) {
+                    if (insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i, -1)) {
                         Py_DECREF(self);
                         return NULL;
                     }
                     break;
                 case KAT_FLOAT32:
-                    if (insert_float(self, *(npy_float*)PyArray_GETPTR1(a, i), i)) {
+                    if (insert_float(self, *(npy_float*)PyArray_GETPTR1(a, i), i, -1)) {
                         Py_DECREF(self);
                         return NULL;
                     }
                     break;
                 case KAT_FLOAT16:
-                    if (insert_float(self, *(npy_half*)PyArray_GETPTR1(a, i), i)) {
+                    if (insert_float(self, *(npy_half*)PyArray_GETPTR1(a, i), i, -1)) {
                         Py_DECREF(self);
                         return NULL;
                     }
