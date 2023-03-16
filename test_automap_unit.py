@@ -31,6 +31,7 @@ def test_fam_contains():
 
 # ------------------------------------------------------------------------------
 
+
 def test_fam_constructor_array_int_a1():
     a1 = np.array((10, 20, 30), dtype=np.int64)
     with pytest.raises(TypeError):
@@ -42,11 +43,13 @@ def test_fam_constructor_array_int_a2():
     with pytest.raises(TypeError):
         fam = FrozenAutoMap(a1)
 
+
 def test_fam_constructor_array_int_b():
     a1 = np.array((10, 20, 30, 40), dtype=np.int64).reshape(2, 2)
     a1.flags.writeable = False
     with pytest.raises(TypeError):
         fam = FrozenAutoMap(a1)
+
 
 # def test_fam_constructor_array_a3():
 #     a1 = np.array(("a", "bb", "ccc"))
@@ -61,8 +64,6 @@ def test_fam_constructor_array_float_a():
     a1.flags.writeable = False
     with pytest.raises(NonUniqueError):
         fam = FrozenAutoMap(a1)
-
-
 
 
 # ------------------------------------------------------------------------------
@@ -80,11 +81,10 @@ def test_fam_constructor_array_dt64_a():
 
 
 def test_fam_constructor_array_unicode_a():
-    a1 = np.array(('a', 'b', 'a'))
+    a1 = np.array(("a", "b", "a"))
     a1.flags.writeable = False
     with pytest.raises(NonUniqueError):
         fam = FrozenAutoMap(a1)
-
 
 
 # ------------------------------------------------------------------------------
