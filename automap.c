@@ -150,17 +150,21 @@ typedef struct {
 
 typedef enum {
     KAT_LIST = 0, // must be falsy
+
     KAT_INT8 = 1,
     KAT_INT16 = 2,
     KAT_INT32 = 3,
     KAT_INT64 = 4,
+
     KAT_UINT8 = 5,
     KAT_UINT16 = 6,
     KAT_UINT32 = 7,
     KAT_UINT64 = 8,
+
     KAT_FLOAT16 = 9,
     KAT_FLOAT32 = 10,
     KAT_FLOAT64 = 11,
+
     KAT_UNICODE = 12,
 } KeysArrayType;
 
@@ -223,12 +227,14 @@ double_to_hash(double v)
 
 
 Py_hash_t
-char_to_hash(const char *str, size_t len) {
+UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
     const Py_hash_t FNV_OFFSET_BASIS = 0x811c9dc5;
     const Py_hash_t FNV_PRIME = 0x01000193;
     Py_hash_t hash = FNV_OFFSET_BASIS;
-    for (size_t i = 0; i < len; i++) {
-        hash = (hash * FNV_PRIME) ^ str[i];
+    Py_UCS4* p = str;
+    Py_UCS4* p_end = str + len;
+    while (p < p_end) {
+        hash = (hash * FNV_PRIME) ^ *p++;
     }
     return hash;
 }
@@ -843,7 +849,7 @@ lookup(FAMObject *self, PyObject *key) {
             return -1;
         }
         Py_ssize_t v_size = PyUnicode_GetLength(key);
-        Py_hash_t hash = 0; // TODO
+        Py_hash_t hash = UCS4_to_hash(v, v_size);
         table_pos = lookup_hash_unicode(self, v, v_size, hash);
         PyMem_Free(v);
     }
@@ -940,7 +946,7 @@ insert_unicode(
         Py_hash_t hash)
 {
     if (hash == -1) {
-        hash = 0;
+        hash = UCS4_to_hash(key, key_size);
     }
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos;
