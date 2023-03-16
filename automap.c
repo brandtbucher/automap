@@ -226,18 +226,31 @@ double_to_hash(double v)
 }
 
 
+// Py_hash_t
+// UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
+//     const Py_hash_t FNV_OFFSET_BASIS = 0x811c9dc5;
+//     const Py_hash_t FNV_PRIME = 0x01000193;
+//     Py_hash_t hash = FNV_OFFSET_BASIS;
+//     Py_UCS4* p = str;
+//     Py_UCS4* p_end = str + len;
+//     while (p < p_end) {
+//         hash = (hash * FNV_PRIME) ^ *p++;
+//     }
+//     return hash;
+// }
+
+// This is a "djb2" hash algorithm.
 Py_hash_t
 UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
-    const Py_hash_t FNV_OFFSET_BASIS = 0x811c9dc5;
-    const Py_hash_t FNV_PRIME = 0x01000193;
-    Py_hash_t hash = FNV_OFFSET_BASIS;
     Py_UCS4* p = str;
     Py_UCS4* p_end = str + len;
+    Py_hash_t hash = 5381;
     while (p < p_end) {
-        hash = (hash * FNV_PRIME) ^ *p++;
+        hash = ((hash << 5) + hash) + *p++;
     }
     return hash;
 }
+
 
 //------------------------------------------------------------------------------
 // the global int_cache is shared among all instances
