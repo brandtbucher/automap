@@ -161,7 +161,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 50
+NUMBER = 100
 
 from itertools import product
 
@@ -297,12 +297,22 @@ class FFInt32(FixtureFactory):
         return array
 
 
-class FFFloat(FixtureFactory):
+class FFFloat64(FixtureFactory):
     NAME = "float64"
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = np.arange(size) * 0.5
+        array = (np.arange(size) * 0.5).astype(np.float64)
+        array.flags.writeable = False
+        return array
+
+
+class FFFloat32(FixtureFactory):
+    NAME = "float32"
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = (np.arange(size) * 0.5).astype(np.float32)
         array.flags.writeable = False
         return array
 
@@ -358,7 +368,7 @@ CLS_PROCESSOR = (
 CLS_FF = (
     FFInt32,
     FFInt64,
-    FFFloat,
+    FFFloat64,
     FFString,
     FFObject,
 )
