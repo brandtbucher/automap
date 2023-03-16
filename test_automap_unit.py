@@ -203,6 +203,8 @@ def test_fam_array_unicode_get_a():
     assert fam.get("ccc") == 2
     assert fam.get(None) is None
     assert fam.get(3.2) is None
+    assert fam.get("cc") is None
+    assert fam.get("cccc") is None
 
 
 # ------------------------------------------------------------------------------

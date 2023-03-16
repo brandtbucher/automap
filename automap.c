@@ -225,20 +225,6 @@ double_to_hash(double v)
     return (Py_hash_t)x;
 }
 
-
-// Py_hash_t
-// UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
-//     const Py_hash_t FNV_OFFSET_BASIS = 0x811c9dc5;
-//     const Py_hash_t FNV_PRIME = 0x01000193;
-//     Py_hash_t hash = FNV_OFFSET_BASIS;
-//     Py_UCS4* p = str;
-//     Py_UCS4* p_end = str + len;
-//     while (p < p_end) {
-//         hash = (hash * FNV_PRIME) ^ *p++;
-//     }
-//     return hash;
-// }
-
 // This is a "djb2" hash algorithm.
 Py_hash_t
 UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
@@ -706,6 +692,7 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
         table_pos = (5 * (table_pos - SCAN) + (mixin >>= 1) + 1) & mask;
     }
 }
+
 
 static Py_ssize_t
 lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
