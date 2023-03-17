@@ -1107,9 +1107,12 @@ copy(PyTypeObject *cls, FAMObject *self)
     new->keys_array_type = self->keys_array_type;
     new->keys_size = self->keys_size;
 
-    // TODO: need to allocate to key_buffer if array type
-    self->key_buffer = NULL;
-
+    new->key_buffer = NULL;
+    if (new->keys_array_type == KAT_UNICODE) {
+        PyArrayObject *a = (PyArrayObject *)new->keys;
+        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+        new->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
+    }
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
     new->table = PyMem_New(TableElement, table_size_alloc);
     if (!new->table) {
