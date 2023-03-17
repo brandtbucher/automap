@@ -112,7 +112,7 @@ class FAMLNotIn(MapProcessor):
     def __call__(self):
         m = self.faml
         for _ in self.list:
-            assert None not in m[k]
+            assert None not in m
 
 
 class FAMANotIn(MapProcessor):
@@ -122,7 +122,7 @@ class FAMANotIn(MapProcessor):
     def __call__(self):
         m = self.fama
         for _ in self.list:
-            assert None not in m[k]
+            assert None not in m
 
 
 class DictNotIn(MapProcessor):
@@ -131,8 +131,8 @@ class DictNotIn(MapProcessor):
 
     def __call__(self):
         m = self.d
-        for k in self.list:
-            assert None not in m[k]
+        for _ in self.list:
+            assert None not in m
 
 
 # -------------------------------------------------------------------------------
@@ -357,6 +357,15 @@ class FFString(FixtureFactory):
         array.flags.writeable = False
         return array
 
+class FFString4x(FixtureFactory):
+    NAME = "string 4x"
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.array([hex(e) * 4 for e in range(size)])
+        array.flags.writeable = False
+        return array
+
 
 class FFObject(FixtureFactory):
     NAME = "object"
@@ -394,16 +403,17 @@ CLS_PROCESSOR = (
     FAMLNotIn,
     FAMANotIn,
     DictNotIn,
-    FAMLKeys,
-    FAMAKeys,
-    DictKeys,
+    # FAMLKeys,
+    # FAMAKeys,
+    # DictKeys,
 )
 
 CLS_FF = (
-    FFInt32,
+    # FFInt32,
     FFInt64,
     FFFloat64,
     FFString,
+    FFString4x,
     FFObject,
 )
 
