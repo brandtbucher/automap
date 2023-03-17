@@ -1534,16 +1534,33 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                 break;
 
             case KAT_UNICODE: {
-                for (; i < keys_size; i++) {
-                    Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
-                    // discover the size of this element, up to the max size possible, by incrementing pointer and then subtracting from start on call to insert_unicode
-                    Py_UCS4* p = v;
-                    Py_UCS4* p_end = v + dt_size;
-                    while (p < p_end && *p != '\0') {
-                        p++;
-                    }
-                    if (insert_unicode(self, v, p-v, i, -1)) {
-                        goto error;
+                if (0) {
+                //     Py_UCS4 *b = (Py_UCS4*)PyArray_DATA(a);
+                //     Py_UCS4 *b_end = b + keys_size * dt_size;
+                //     while (b < b_end) {
+                //         Py_UCS4* p = b;
+                //         Py_UCS4* p_end = p + dt_size;
+                //         while (p < p_end && *p != '\0') {
+                //             p++;
+                //         }
+                //         if (insert_unicode(self, b, p-b, i, -1)) {
+                //             goto error;
+                //         }
+                //         b = p_end;
+                //     }
+                }
+                else {
+                    for (; i < keys_size; i++) {
+                        Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
+                        // discover the size of this element, up to the max size possible, by incrementing pointer and then subtracting from start on call to insert_unicode
+                        Py_UCS4* p = v;
+                        Py_UCS4* p_end = v + dt_size;
+                        while (p < p_end && *p != '\0') {
+                            p++;
+                        }
+                        if (insert_unicode(self, v, p-v, i, -1)) {
+                            goto error;
+                        }
                     }
                 }
                 break;
