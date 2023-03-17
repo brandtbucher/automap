@@ -1512,9 +1512,22 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                 }
                 break;
             case KAT_FLOAT64:
-                for (; i < keys_size; i++) {
-                    if (insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i, -1)) {
-                        goto error;
+                if (contiguous) {
+                    npy_double* b = (npy_double*)PyArray_DATA(a);
+                    npy_double* b_end = b + keys_size;
+                    while (b < b_end) {
+                        if (insert_float(self, *b, i, -1)) {
+                            goto error;
+                        }
+                        b++;
+                        i++;
+                    }
+                }
+                else {
+                    for (; i < keys_size; i++) {
+                        if (insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i, -1)) {
+                            goto error;
+                        }
                     }
                 }
                 break;
@@ -1534,20 +1547,21 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                 break;
 
             case KAT_UNICODE: {
-                if (0) {
-                //     Py_UCS4 *b = (Py_UCS4*)PyArray_DATA(a);
-                //     Py_UCS4 *b_end = b + keys_size * dt_size;
-                //     while (b < b_end) {
-                //         Py_UCS4* p = b;
-                //         Py_UCS4* p_end = p + dt_size;
-                //         while (p < p_end && *p != '\0') {
-                //             p++;
-                //         }
-                //         if (insert_unicode(self, b, p-b, i, -1)) {
-                //             goto error;
-                //         }
-                //         b = p_end;
-                //     }
+                if (contiguous) {
+                    Py_UCS4 *b = (Py_UCS4*)PyArray_DATA(a);
+                    Py_UCS4 *b_end = b + keys_size * dt_size;
+                    while (b < b_end) {
+                        Py_UCS4* p = b;
+                        Py_UCS4* p_end = p + dt_size;
+                        while (p < p_end && *p != '\0') {
+                            p++;
+                        }
+                        if (insert_unicode(self, b, p-b, i, -1)) {
+                            goto error;
+                        }
+                        b = p_end;
+                        i++;
+                    }
                 }
                 else {
                     for (; i < keys_size; i++) {

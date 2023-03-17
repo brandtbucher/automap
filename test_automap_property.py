@@ -1,7 +1,13 @@
 import pickle
 import typing
 
+import numpy as np
 import hypothesis
+from hypothesis.extra.numpy import arrays
+from hypothesis.extra.numpy import scalar_dtypes
+from hypothesis import strategies as st
+from hypothesis import given
+
 import pytest
 
 from automap import AutoMap
@@ -11,13 +17,37 @@ from automap import NonUniqueError
 Keys = typing.Set[typing.Hashable]
 
 
-@hypothesis.given(keys=hypothesis.infer)
-def test_auto_map___len__(keys: Keys) -> None:
+
+def get_array() -> st.SearchStrategy:
+    '''
+    Labels are suitable for creating non-date Indices (though they might include dates); these labels might force an object array result.
+    '''
+    def immutable(a):
+        if a.dtype.kind in ('f', 'c'):
+            a = a[~np.isnan(a)]
+        a.flags.writeable = False
+        return a
+
+    return arrays(shape=1,
+            unique=True,
+            fill=st.nothing(),
+            dtype=scalar_dtypes()
+            ).map(immutable)
+
+
+
+@given(keys=hypothesis.infer)
+def test_am___len__(keys: Keys) -> None:
     assert len(AutoMap(keys)) == len(keys)
 
+@given(keys=get_array())
+def test_fam_array___len__(keys: Keys) -> None:
+    assert len(FrozenAutoMap(keys)) == len(keys)
 
-@hypothesis.given(keys=hypothesis.infer, others=hypothesis.infer)
-def test_auto_map___contains__(keys: Keys, others: Keys) -> None:
+
+
+@given(keys=hypothesis.infer, others=hypothesis.infer)
+def test_am___contains__(keys: Keys, others: Keys) -> None:
     a = AutoMap(keys)
     for key in keys:
         assert key in a
@@ -25,9 +55,17 @@ def test_auto_map___contains__(keys: Keys, others: Keys) -> None:
     for key in others:
         assert key not in a
 
+# @given(keys=get_array())
+# def test_fam_array___contains__(keys: Keys) -> None:
+#     keys.flags.writeable = False
+#     a = FrozenAutoMap(keys)
+#     for key in keys:
+#         assert key in a
 
-@hypothesis.given(keys=hypothesis.infer, others=hypothesis.infer)
-def test_auto_map___getitem__(keys: Keys, others: Keys) -> None:
+
+
+@given(keys=hypothesis.infer, others=hypothesis.infer)
+def test_am___getitem__(keys: Keys, others: Keys) -> None:
     a = AutoMap(keys)
     for index, key in enumerate(keys):
         assert a[key] == index
@@ -37,23 +75,38 @@ def test_auto_map___getitem__(keys: Keys, others: Keys) -> None:
             a[key]
 
 
-@hypothesis.given(keys=hypothesis.infer)
-def test_auto_map___hash__(keys: Keys) -> None:
+@given(keys=hypothesis.infer)
+def test_am___hash__(keys: Keys) -> None:
+    assert hash(FrozenAutoMap(keys)) == hash(FrozenAutoMap(keys))
+
+@given(keys=get_array())
+def test_fam_array___hash__(keys: Keys) -> None:
     assert hash(FrozenAutoMap(keys)) == hash(FrozenAutoMap(keys))
 
 
-@hypothesis.given(keys=hypothesis.infer)
-def test_auto_map___iter__(keys: Keys) -> None:
+
+@given(keys=hypothesis.infer)
+def test_am___iter__(keys: Keys) -> None:
     assert [*AutoMap(keys)] == [*keys]
 
+@given(keys=hypothesis.infer)
+def test_fam_array___iter__(keys: Keys) -> None:
+    assert [*FrozenAutoMap(keys)] == [*keys]
 
-@hypothesis.given(keys=hypothesis.infer)
-def test_auto_map___reversed__(keys: Keys) -> None:
+
+
+@given(keys=hypothesis.infer)
+def test_am___reversed__(keys: Keys) -> None:
     assert [*reversed(AutoMap(keys))] == [*reversed([*keys])]
 
+@given(keys=get_array())
+def test_fam_array___reversed__(keys: Keys) -> None:
+    assert [*reversed(FrozenAutoMap(keys))] == [*reversed([*keys])]
 
-@hypothesis.given(keys=hypothesis.infer)
-def test_auto_map_add(keys: Keys) -> None:
+
+
+@given(keys=hypothesis.infer)
+def test_am_add(keys: Keys) -> None:
     a = AutoMap()
     for l, key in enumerate(keys):
         assert a.add(key) is None
@@ -61,8 +114,8 @@ def test_auto_map_add(keys: Keys) -> None:
         assert a[key] == l
 
 
-@hypothesis.given(keys=hypothesis.infer)
-def test_pickle(keys: Keys) -> None:
+@given(keys=hypothesis.infer)
+def test_am_pickle(keys: Keys) -> None:
     try:
         hypothesis.assume(pickle.loads(pickle.dumps(keys)) == keys)
     except (TypeError, pickle.PicklingError):
@@ -70,8 +123,19 @@ def test_pickle(keys: Keys) -> None:
     a = AutoMap(keys)
     assert pickle.loads(pickle.dumps(a)) == a
 
+# NOTE: need to set arrays to be immutable on unpickling
+# @given(keys=get_array())
+# def test_fam_array_pickle(keys: Keys) -> None:
+#     try:
+#         hypothesis.assume(pickle.loads(pickle.dumps(keys)) == keys)
+#     except (TypeError, pickle.PicklingError):
+#         hypothesis.assume(False)
+#     a = FrozenAutoMap(keys)
+#     assert pickle.loads(pickle.dumps(a)) == a
 
-@hypothesis.given(keys=hypothesis.infer)
+
+
+@given(keys=hypothesis.infer)
 def test_issue_3(keys: Keys) -> None:
     hypothesis.assume(keys)
     key = keys.pop()
@@ -81,8 +145,8 @@ def test_issue_3(keys: Keys) -> None:
         a |= (key,)
 
 
-@hypothesis.given(keys=hypothesis.infer)
-def test_non_unique_exception(keys: Keys):
+@given(keys=hypothesis.infer)
+def test_am_non_unique_exception(keys: Keys):
     hypothesis.assume(keys)
     duplicate = next(iter(keys))
 
@@ -91,3 +155,14 @@ def test_non_unique_exception(keys: Keys):
 
     with pytest.raises(NonUniqueError):
         AutoMap([*keys, duplicate])
+
+@given(keys=get_array())
+def test_fam_non_unique_exception(keys: Keys):
+    hypothesis.assume(keys)
+    duplicate = next(iter(keys))
+
+    with pytest.raises(ValueError):
+        FrozenAutoMap([*keys, duplicate])
+
+    with pytest.raises(NonUniqueError):
+        FrozenAutoMap([*keys, duplicate])
