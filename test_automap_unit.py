@@ -87,6 +87,17 @@ def test_fam_constructor_array_unicode_a():
         fam = FrozenAutoMap(a1)
 
 
+def test_fam_copy_array_unicode_a():
+    a1 = np.array(("a", "ccc", "bb"))
+    a1.flags.writeable = False
+    fam1 = FrozenAutoMap(a1)
+    fam2 = FrozenAutoMap(fam1)
+    assert fam2["a"] == 0
+    assert fam2["ccc"] == 1
+    assert fam2["bb"] == 2
+
+
+
 # ------------------------------------------------------------------------------
 
 
