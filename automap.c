@@ -640,10 +640,11 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
     PyObject *guess = NULL;
     int result = -1;
+    Py_hash_t h = 0;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
-            Py_hash_t h = table[table_pos].hash;
+            h = table[table_pos].hash;
             if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
@@ -681,10 +682,11 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
     int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
     npy_int64 k = 0;
+    Py_hash_t h = 0;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
-            Py_hash_t h = table[table_pos].hash;
+            h = table[table_pos].hash;
             if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
@@ -731,10 +733,11 @@ lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
     int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
     npy_double k = 0;
+    Py_hash_t h = 0;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
-            Py_hash_t h = table[table_pos].hash;
+            h = table[table_pos].hash;
             if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
