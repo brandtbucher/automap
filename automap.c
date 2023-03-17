@@ -222,6 +222,16 @@ typedef enum {
 } ViewKind;
 
 
+static inline Py_UCS4*
+ucs4_get_end_p(Py_UCS4* p, Py_ssize_t dt_size) {
+    Py_UCS4* p_end = p + dt_size;
+    while (p < p_end && *p != '\0') {
+        p++;
+    }
+    return p;
+}
+
+
 Py_hash_t
 uint_to_hash(npy_uint64 v) {
     return trunc(v * 0.5);
@@ -818,13 +828,13 @@ lookup_hash_unicode(
                 table_pos++;
                 continue;
             }
-            p_start = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
             result = 1;
+            p_start = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+            p_end = p_start + (key_size < dt_size ? key_size : dt_size);
             p = p_start;
             key_p = key;
             // scan the minimum of passed key size, or element size of the keys array
             // if the key is longer then p, we will identify nulls in p and break
-            p_end = p_start + (key_size < dt_size ? key_size : dt_size);
             while (p < p_end && *p != '\0') {
                 if (*p != *key_p) {
                      result = 0;
@@ -900,18 +910,13 @@ lookup(FAMObject *self, PyObject *key) {
         if (k_size > dt_size) {
             return -1;
         }
-        // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and stil discover the lookup
+        // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and still discover the lookup
         if (!PyUnicode_AsUCS4(key, self->key_buffer, dt_size+1, 1)) {
             return -1; // exception will be set
         }
-        // Py_UCS4* v = PyUnicode_AsUCS4Copy(key); // new alloc, add null
-        // if (!v) { // alloc error
-        //     return -1;
-        // }
         // rather than allocate on every call, explore storing on teh FAM
         Py_hash_t hash = UCS4_to_hash(self->key_buffer, k_size);
         table_pos = lookup_hash_unicode(self, self->key_buffer, k_size, hash);
-        // PyMem_Free(v);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -1388,7 +1393,6 @@ fam_values(FAMObject *self)
     return famv_new(self, VALUES);
 }
 
-
 static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
@@ -1547,31 +1551,23 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                 break;
 
             case KAT_UNICODE: {
+                Py_UCS4* p = NULL;
                 if (contiguous) {
                     Py_UCS4 *b = (Py_UCS4*)PyArray_DATA(a);
                     Py_UCS4 *b_end = b + keys_size * dt_size;
                     while (b < b_end) {
-                        Py_UCS4* p = b;
-                        Py_UCS4* p_end = p + dt_size;
-                        while (p < p_end && *p != '\0') {
-                            p++;
-                        }
+                        p = ucs4_get_end_p(b, dt_size);
                         if (insert_unicode(self, b, p-b, i, -1)) {
                             goto error;
                         }
-                        b = p_end;
+                        b += dt_size;
                         i++;
                     }
                 }
                 else {
                     for (; i < keys_size; i++) {
                         Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
-                        // discover the size of this element, up to the max size possible, by incrementing pointer and then subtracting from start on call to insert_unicode
-                        Py_UCS4* p = v;
-                        Py_UCS4* p_end = v + dt_size;
-                        while (p < p_end && *p != '\0') {
-                            p++;
-                        }
+                        p = ucs4_get_end_p(v, dt_size);
                         if (insert_unicode(self, v, p-v, i, -1)) {
                             goto error;
                         }
