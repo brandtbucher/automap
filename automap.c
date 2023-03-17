@@ -211,7 +211,7 @@ typedef struct {
     PyObject *keys;
     KeysArrayType keys_array_type;
     Py_ssize_t keys_size;
-    Py_UCS4* key_buffer;
+    Py_UCS4* key_buffer; // could be void* if we need to switch between Py_UCS4* and char*
 } FAMObject;
 
 
