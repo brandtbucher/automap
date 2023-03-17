@@ -357,6 +357,7 @@ class FFString(FixtureFactory):
         array.flags.writeable = False
         return array
 
+
 class FFString4x(FixtureFactory):
     NAME = "string 4x"
 
