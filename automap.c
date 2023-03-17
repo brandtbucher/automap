@@ -151,21 +151,21 @@ typedef struct {
 typedef enum {
     KAT_LIST = 0, // must be falsy
 
-    KAT_INT8 = 1,
-    KAT_INT16 = 2,
-    KAT_INT32 = 3,
-    KAT_INT64 = 4,
+    KAT_INT8, // order matters as ranges of size are used in selection
+    KAT_INT16,
+    KAT_INT32,
+    KAT_INT64,
 
-    KAT_UINT8 = 5,
-    KAT_UINT16 = 6,
-    KAT_UINT32 = 7,
-    KAT_UINT64 = 8,
+    KAT_UINT8,
+    KAT_UINT16,
+    KAT_UINT32,
+    KAT_UINT64,
 
-    KAT_FLOAT16 = 9,
-    KAT_FLOAT32 = 10,
-    KAT_FLOAT64 = 11,
+    KAT_FLOAT16,
+    KAT_FLOAT32,
+    KAT_FLOAT64,
 
-    KAT_UNICODE = 12,
+    KAT_UNICODE,
 } KeysArrayType;
 
 
@@ -180,6 +180,15 @@ at_to_kat(int array_t) {
             return KAT_INT16;
         case NPY_INT8:
             return KAT_INT8;
+
+        case NPY_UINT64:
+            return KAT_UINT64;
+        case NPY_UINT32:
+            return KAT_UINT32;
+        case NPY_UINT16:
+            return KAT_UINT16;
+        case NPY_UINT8:
+            return KAT_UINT8;
 
         case NPY_FLOAT64:
             return KAT_FLOAT64;
@@ -211,6 +220,12 @@ typedef enum {
     KEYS,
     VALUES,
 } ViewKind;
+
+
+Py_hash_t
+uint_to_hash(npy_uint64 v) {
+    return trunc(v * 0.5);
+}
 
 
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
