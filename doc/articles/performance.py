@@ -105,6 +105,37 @@ class DictLookup(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
+class FAMLNotIn(MapProcessor):
+    NAME = "FAM(L): not in"
+    SORT = 0
+
+    def __call__(self):
+        m = self.faml
+        for _ in self.list:
+            assert None not in m[k]
+
+
+class FAMANotIn(MapProcessor):
+    NAME = "FAM(A): not in"
+    SORT = 0
+
+    def __call__(self):
+        m = self.fama
+        for _ in self.list:
+            assert None not in m[k]
+
+
+class DictNotIn(MapProcessor):
+    NAME = "Dict: not in"
+    SORT = 0
+
+    def __call__(self):
+        m = self.d
+        for k in self.list:
+            assert None not in m[k]
+
+
+# -------------------------------------------------------------------------------
 class FAMLKeys(MapProcessor):
     NAME = "FAM(L): keys"
     SORT = 0
@@ -161,7 +192,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 200
+NUMBER = 2
 
 from itertools import product
 
@@ -360,6 +391,9 @@ CLS_PROCESSOR = (
     FAMLLookup,
     FAMALookup,
     DictLookup,
+    FAMLNotIn,
+    FAMANotIn,
+    DictNotIn,
     FAMLKeys,
     FAMAKeys,
     DictKeys,
