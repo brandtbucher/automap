@@ -1,5 +1,6 @@
 import pickle
 import typing
+from functools import partial
 
 import numpy as np
 import hypothesis
@@ -22,19 +23,25 @@ def get_array() -> st.SearchStrategy:
     '''
     Labels are suitable for creating non-date Indices (though they might include dates); these labels might force an object array result.
     '''
-    def immutable(a):
+    def proc(a: np.ndarray, contiguous: bool):
         if a.dtype.kind in ('f', 'c'):
             a = a[~np.isnan(a)]
+        if not contiguous:
+            a = np.lib.stride_tricks.as_strided(a,
+                    shape=(len(a) // 2,),
+                    strides=(a.dtype.itemsize*2,),
+                    )
         a.flags.writeable = False
         return a
 
-    return arrays(shape=1,
-            unique=True,
-            fill=st.nothing(),
-            dtype=scalar_dtypes()
-            ).map(immutable)
+    def strategy(contiguous: bool):
+        return arrays(shape=1,
+                unique=True,
+                fill=st.nothing(),
+                dtype=scalar_dtypes()
+                ).map(partial(proc, contiguous=contiguous))
 
-
+    return st.one_of(strategy(contiguous=True), strategy(contiguous=False))
 
 @given(keys=hypothesis.infer)
 def test_am___len__(keys: Keys) -> None:
