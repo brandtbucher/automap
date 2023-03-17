@@ -192,7 +192,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 2
+NUMBER = 10
 
 from itertools import product
 
@@ -394,8 +394,8 @@ def get_versions() -> str:
 
 CLS_PROCESSOR = (
     FAMLInstantiate,
-    # AMAInstantiate,
     FAMAInstantiate,
+    AMAInstantiate,
     # FAMAtolistInstantiate,
     DictInstantiate,
     FAMLLookup,

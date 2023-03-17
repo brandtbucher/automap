@@ -1480,50 +1480,32 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             self->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
         }
 
+        // PyArray_IS_C_CONTIGUOUS(a)
+        int error = 0;
+
         for (; i < keys_size; i++) {
             switch (keys_array_type) {
                 case KAT_INT64:
-                    if (insert_int(self, *(npy_int64*)PyArray_GETPTR1(a, i), i)) {
-                        Py_DECREF(self);
-                        return NULL;
-                    }
+                    error = insert_int(self, *(npy_int64*)PyArray_GETPTR1(a, i), i);
                     break;
                 case KAT_INT32:
-                    if (insert_int(self, *(npy_int32*)PyArray_GETPTR1(a, i), i)) {
-                        Py_DECREF(self);
-                        return NULL;
-                    }
+                    error = insert_int(self, *(npy_int32*)PyArray_GETPTR1(a, i), i);
                     break;
                 case KAT_INT16:
-                    if (insert_int(self, *(npy_int16*)PyArray_GETPTR1(a, i), i)) {
-                        Py_DECREF(self);
-                        return NULL;
-                    }
+                    error = insert_int(self, *(npy_int16*)PyArray_GETPTR1(a, i), i);
                     break;
                 case KAT_INT8:
-                    if (insert_int(self, *(npy_int8*)PyArray_GETPTR1(a, i), i)) {
-                        Py_DECREF(self);
-                        return NULL;
-                    }
+                    error = insert_int(self, *(npy_int8*)PyArray_GETPTR1(a, i), i);
                     break;
 
                 case KAT_FLOAT64:
-                    if (insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i, -1)) {
-                        Py_DECREF(self);
-                        return NULL;
-                    }
+                    error = insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i, -1);
                     break;
                 case KAT_FLOAT32:
-                    if (insert_float(self, *(npy_float*)PyArray_GETPTR1(a, i), i, -1)) {
-                        Py_DECREF(self);
-                        return NULL;
-                    }
+                    error = insert_float(self, *(npy_float*)PyArray_GETPTR1(a, i), i, -1);
                     break;
                 case KAT_FLOAT16:
-                    if (insert_float(self, *(npy_half*)PyArray_GETPTR1(a, i), i, -1)) {
-                        Py_DECREF(self);
-                        return NULL;
-                    }
+                    error = insert_float(self, *(npy_half*)PyArray_GETPTR1(a, i), i, -1);
                     break;
 
                 case KAT_UNICODE: {
@@ -1534,12 +1516,13 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                     while (p < p_end && *p != '\0') {
                         p++;
                     }
-                    if (insert_unicode(self, v, p-v, i, -1)) {
-                        Py_DECREF(self);
-                        return NULL;
-                    }
+                    error = insert_unicode(self, v, p-v, i, -1);
                     break;
                 }
+            }
+            if (error) {
+                Py_DECREF(self);
+                return NULL;
             }
         }
     }
