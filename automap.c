@@ -1086,7 +1086,6 @@ copy(PyTypeObject *cls, FAMObject *self)
     if (self->keys_array_type) {
         keys = self->keys;
         // assume we do not need to incref as fam_new does
-        // Py_INCREF(keys);
     }
     else {
         keys = PySequence_List(self->keys);
@@ -1107,6 +1106,9 @@ copy(PyTypeObject *cls, FAMObject *self)
     new->table_size = self->table_size;
     new->keys_array_type = self->keys_array_type;
     new->keys_size = self->keys_size;
+
+    // TODO: need to allocate to key_buffer if array type
+    self->key_buffer = NULL;
 
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
     new->table = PyMem_New(TableElement, table_size_alloc);
