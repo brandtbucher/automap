@@ -1475,40 +1475,54 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     if (keys_array_type) {
         PyArrayObject *a = (PyArrayObject *)self->keys;
         Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+        // int contiguous = PyArray_IS_C_CONTIGUOUS(a);
+
         if (keys_array_type == KAT_UNICODE) {
             // Over allocate 1 so there is room for null at end. This is only used in lookup();
             self->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
         }
 
-        // PyArray_IS_C_CONTIGUOUS(a)
         int error = 0;
 
-        for (; i < keys_size; i++) {
-            switch (keys_array_type) {
-                case KAT_INT64:
+        switch (keys_array_type) {
+            case KAT_INT64:
+                for (; i < keys_size; i++) {
                     error = insert_int(self, *(npy_int64*)PyArray_GETPTR1(a, i), i);
-                    break;
-                case KAT_INT32:
+                }
+                break;
+            case KAT_INT32:
+                for (; i < keys_size; i++) {
                     error = insert_int(self, *(npy_int32*)PyArray_GETPTR1(a, i), i);
-                    break;
-                case KAT_INT16:
+                }
+                break;
+            case KAT_INT16:
+                for (; i < keys_size; i++) {
                     error = insert_int(self, *(npy_int16*)PyArray_GETPTR1(a, i), i);
-                    break;
-                case KAT_INT8:
+                }
+                break;
+            case KAT_INT8:
+                for (; i < keys_size; i++) {
                     error = insert_int(self, *(npy_int8*)PyArray_GETPTR1(a, i), i);
-                    break;
-
-                case KAT_FLOAT64:
+                }
+                break;
+            case KAT_FLOAT64:
+                for (; i < keys_size; i++) {
                     error = insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i, -1);
-                    break;
-                case KAT_FLOAT32:
+                }
+                break;
+            case KAT_FLOAT32:
+                for (; i < keys_size; i++) {
                     error = insert_float(self, *(npy_float*)PyArray_GETPTR1(a, i), i, -1);
-                    break;
-                case KAT_FLOAT16:
+                }
+                break;
+            case KAT_FLOAT16:
+                for (; i < keys_size; i++) {
                     error = insert_float(self, *(npy_half*)PyArray_GETPTR1(a, i), i, -1);
-                    break;
+                }
+                break;
 
-                case KAT_UNICODE: {
+            case KAT_UNICODE: {
+                for (; i < keys_size; i++) {
                     Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
                     // discover the size of this element, up to the max size possible, by incrementing pointer and then subtracting from start on call to insert_unicode
                     Py_UCS4* p = v;
@@ -1517,14 +1531,59 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                         p++;
                     }
                     error = insert_unicode(self, v, p-v, i, -1);
-                    break;
                 }
-            }
-            if (error) {
-                Py_DECREF(self);
-                return NULL;
+                break;
             }
         }
+        if (error) {
+            Py_DECREF(self);
+            return NULL;
+        }
+        // }
+
+
+        // for (; i < keys_size; i++) {
+        //     switch (keys_array_type) {
+        //         case KAT_INT64:
+        //             error = insert_int(self, *(npy_int64*)PyArray_GETPTR1(a, i), i);
+        //             break;
+        //         case KAT_INT32:
+        //             error = insert_int(self, *(npy_int32*)PyArray_GETPTR1(a, i), i);
+        //             break;
+        //         case KAT_INT16:
+        //             error = insert_int(self, *(npy_int16*)PyArray_GETPTR1(a, i), i);
+        //             break;
+        //         case KAT_INT8:
+        //             error = insert_int(self, *(npy_int8*)PyArray_GETPTR1(a, i), i);
+        //             break;
+
+        //         case KAT_FLOAT64:
+        //             error = insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i, -1);
+        //             break;
+        //         case KAT_FLOAT32:
+        //             error = insert_float(self, *(npy_float*)PyArray_GETPTR1(a, i), i, -1);
+        //             break;
+        //         case KAT_FLOAT16:
+        //             error = insert_float(self, *(npy_half*)PyArray_GETPTR1(a, i), i, -1);
+        //             break;
+
+        //         case KAT_UNICODE: {
+        //             Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
+        //             // discover the size of this element, up to the max size possible, by incrementing pointer and then subtracting from start on call to insert_unicode
+        //             Py_UCS4* p = v;
+        //             Py_UCS4* p_end = v + dt_size;
+        //             while (p < p_end && *p != '\0') {
+        //                 p++;
+        //             }
+        //             error = insert_unicode(self, v, p-v, i, -1);
+        //             break;
+        //         }
+        //     }
+        //     if (error) {
+        //         Py_DECREF(self);
+        //         return NULL;
+        //     }
+        // }
     }
     else {
         for (; i < keys_size; i++) {
