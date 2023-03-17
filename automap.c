@@ -202,6 +202,7 @@ typedef struct {
     PyObject *keys;
     KeysArrayType keys_array_type;
     Py_ssize_t keys_size;
+    Py_UCS4* key_buffer;
 } FAMObject;
 
 
@@ -784,10 +785,6 @@ lookup_hash_unicode(
 
     PyArrayObject *a = (PyArrayObject *)self->keys;
     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-    // if the key_size is greater than the dtype size of the array, we know there cannot be a match
-    if (key_size > dt_size) {
-        return -1;
-    }
 
     int result = -1;
     Py_hash_t h = 0;
@@ -881,16 +878,25 @@ lookup(FAMObject *self, PyObject *key) {
         if (!PyUnicode_Check(key)) {
             return -1;
         }
-        // NOTE: could store a UCS4 buffer on fam to write into; would need to check that size is not bigger than known max size before copying
-        Py_UCS4* v = PyUnicode_AsUCS4Copy(key); // new alloc, add null
-        if (!v) { // alloc error
+        PyArrayObject *a = (PyArrayObject *)self->keys;
+        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+        // if the key_size is greater than the dtype size of the array, we know there cannot be a match
+        Py_ssize_t k_size = PyUnicode_GetLength(key);
+        if (k_size > dt_size) {
             return -1;
         }
+        // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and stil discover the lookup
+        if (!PyUnicode_AsUCS4(key, self->key_buffer, dt_size+1, 1)) {
+            return -1; // exception will be set
+        }
+        // Py_UCS4* v = PyUnicode_AsUCS4Copy(key); // new alloc, add null
+        // if (!v) { // alloc error
+        //     return -1;
+        // }
         // rather than allocate on every call, explore storing on teh FAM
-        Py_ssize_t v_size = PyUnicode_GetLength(key);
-        Py_hash_t hash = UCS4_to_hash(v, v_size);
-        table_pos = lookup_hash_unicode(self, v, v_size, hash);
-        PyMem_Free(v);
+        Py_hash_t hash = UCS4_to_hash(self->key_buffer, k_size);
+        table_pos = lookup_hash_unicode(self, self->key_buffer, k_size, hash);
+        // PyMem_Free(v);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -1261,8 +1267,10 @@ static PySequenceMethods fam_as_sequence = {
 static void
 fam_dealloc(FAMObject *self)
 {
-    PyMem_Del(self->table);
-
+    PyMem_Free(self->table);
+    if (self->key_buffer) {
+        PyMem_Free(self->key_buffer);
+    }
     key_count_global -= self->keys_size;
 
     Py_DECREF(self->keys);
@@ -1435,6 +1443,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         ? PyArray_SIZE((PyArrayObject *)keys)
         : PyList_GET_SIZE(keys);
     self->keys_size = keys_size;
+    self->key_buffer = NULL;
     key_count_global += keys_size;
 
     // NOTE: this only iterates and insert keys when there growing from an old to a new table; on itialization, this does not use keys
@@ -1446,6 +1455,10 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     if (keys_array_type) {
         PyArrayObject *a = (PyArrayObject *)self->keys;
         Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+        if (keys_array_type == KAT_UNICODE) {
+            // Over allocate 1 so there is room for null at end. This is only used in lookup();
+            self->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
+        }
 
         for (; i < keys_size; i++) {
             switch (keys_array_type) {
