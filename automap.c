@@ -781,7 +781,10 @@ lookup_hash_unicode(
 
     PyArrayObject *a = (PyArrayObject *)self->keys;
     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-
+    // if the key_size is greater than the dtype size of the array, we know there cannot be a match
+    if (key_size > dt_size) {
+        return -1;
+    }
 
     int result = -1;
     Py_hash_t h = 0;
@@ -894,7 +897,7 @@ lookup(FAMObject *self, PyObject *key) {
         table_pos = lookup_hash(self, key, hash);
     }
 
-    // A -1 at this table position means that we found an unused storage location
+    // A -1 hash at this table position means that we found an unused storage location
     if ((table_pos < 0) || (self->table[table_pos].hash == -1)) {
         return -1;
     }
