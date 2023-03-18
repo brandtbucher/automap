@@ -192,7 +192,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 200
+NUMBER = 1
 
 from itertools import product
 
@@ -206,9 +206,6 @@ def seconds_to_display(seconds: float) -> str:
     return f"{seconds: .1f} (s)"
 
 
-GROUPS = 4
-
-
 def plot_performance(frame):
     fixture_total = len(frame["fixture"].unique())
     cat_total = len(frame["size"].unique())
@@ -219,13 +216,6 @@ def plot_performance(frame):
 
     cmap = plt.get_cmap("plasma")
     color = cmap(np.arange(processor_total) / processor_total)
-    # color = []
-    # for i in range(GROUPS):
-    #     for j in range(0, processor_total, GROUPS):
-    #         k = i + j
-    #         if k < len(color_raw):
-    #             color.append(color_raw[i + j])
-
     # category is the size of the array
     for cat_count, (cat_label, cat) in enumerate(frame.groupby("size")):
         for fixture_count, (fixture_label, fixture) in enumerate(
@@ -248,7 +238,7 @@ def plot_performance(frame):
             title = f"{cat_label:.0e}\n{fixture_label}"
 
             ax.set_title(title, fontsize=6)
-            ax.set_box_aspect(0.6)  # makes taller tan wide
+            ax.set_box_aspect(0.8)
             time_max = fixture["time"].max()
             ax.set_yticks([0, time_max * 0.5, time_max])
             ax.set_yticklabels(
@@ -268,7 +258,7 @@ def plot_performance(frame):
                 labelbottom=False,
             )
 
-    fig.set_size_inches(8, 4)  # width, height
+    fig.set_size_inches(9, 3)  # width, height
     fig.legend(post, names_display, loc="center right", fontsize=6)
     # horizontal, vertical
     fig.text(0.05, 0.96, f"AutoMap Performance: {NUMBER} Iterations", fontsize=10)
@@ -278,10 +268,10 @@ def plot_performance(frame):
     plt.subplots_adjust(
         left=0.075,
         bottom=0.05,
-        right=0.80,
+        right=0.85,
         top=0.80,
-        wspace=0.7,  # width
-        hspace=0.4,
+        wspace=1.0,  # width
+        hspace=0.2,
     )
     # plt.rcParams.update({'font.size': 22})
     plt.savefig(fp, dpi=300)
@@ -328,6 +318,16 @@ class FFInt32(FixtureFactory):
         return array
 
 
+class FFUInt64(FixtureFactory):
+    NAME = "uint64"
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.arange(size, dtype=np.uint64)
+        array.flags.writeable = False
+        return array
+
+
 class FFFloat64(FixtureFactory):
     NAME = "float64"
 
@@ -364,6 +364,16 @@ class FFString4x(FixtureFactory):
     @staticmethod
     def get_array(size: int) -> np.ndarray:
         array = np.array([hex(e) * 4 for e in range(size)])
+        array.flags.writeable = False
+        return array
+
+
+class FFBytes(FixtureFactory):
+    NAME = "bytes"
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.array([bytes(hex(e), encoding="utf-8") for e in range(size)])
         array.flags.writeable = False
         return array
 
@@ -412,9 +422,11 @@ CLS_PROCESSOR = (
 CLS_FF = (
     # FFInt32,
     FFInt64,
+    FFUInt64,
     FFFloat64,
     FFString,
     FFString4x,
+    FFBytes,
     FFObject,
 )
 

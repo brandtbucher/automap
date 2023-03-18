@@ -913,7 +913,7 @@ lookup(FAMObject *self, PyObject *key) {
 
     if (self->keys_array_type >= KAT_INT8
             && self->keys_array_type <= KAT_INT64) {
-        Py_ssize_t v;
+        Py_ssize_t v = 0;
         if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {
@@ -925,18 +925,23 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else { // NOTE: this works for ints and bools
+        else if (PyNumber_Check(key)) {
+            // NOTE: this works for ints and bools
             v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
                 return -1;
             }
         }
+        else {
+            return -1;
+        }
+
         table_pos = lookup_hash_int(self, v);
     }
     else if (self->keys_array_type >= KAT_UINT8
             && self->keys_array_type <= KAT_UINT64) {
-        Py_ssize_t v;
+        Py_ssize_t v = 0;
         if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {
@@ -948,24 +953,30 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else { // NOTE: this works for ints and bools
+        else if (PyNumber_Check(key)) {
             v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
                 return -1;
             }
+        }
+        else {
+            return -1;
         }
         Py_hash_t hash = uint_to_hash(v);
         table_pos = lookup_hash_uint(self, v, hash);
     }
     else if (self->keys_array_type >= KAT_FLOAT16
             && self->keys_array_type <= KAT_FLOAT64) {
-        double v;
+        double v = 0;
         if (PyFloat_Check(key)) {
             v = PyFloat_AsDouble(key);
         }
-        else {
+        else if (PyNumber_Check(key)) {
             v = (double)PyNumber_AsSsize_t(key, PyExc_OverflowError);
+        }
+        else {
+            return -1;
         }
         if (PyErr_Occurred()) {
             PyErr_Clear();
