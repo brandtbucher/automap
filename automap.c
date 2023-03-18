@@ -865,9 +865,9 @@ lookup_hash_unicode(
     int result = -1;
     Py_hash_t h = 0;
     Py_UCS4* p_start = NULL;
-    Py_UCS4* p = NULL;
-    Py_UCS4* key_p = NULL;
-    Py_UCS4* p_end = NULL;
+    // Py_UCS4* p = NULL;
+    // Py_UCS4* key_p = NULL;
+    // Py_UCS4* p_end = NULL;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
@@ -881,23 +881,9 @@ lookup_hash_unicode(
             }
             result = 1;
             p_start = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
-            p_end = p_start + (key_size < dt_size ? key_size : dt_size);
-            p = p_start;
-            key_p = key;
-            // scan the minimum of passed key size, or element size of the keys array
-            // if the key is longer then p, we will identify nulls in p and break
-            while (p < p_end && *p != '\0') {
-                if (*p != *key_p) {
-                     result = 0;
-                     break;
-                }
-                p++;
-                key_p++;
-            }
-            if (p - p_start != key_size) {
-                result = 0;
-            }
-            if (result) { // Hit.
+            // returns 0 on match
+            result = memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size));
+            if (!result) { // Hit.
                 return table_pos;
             }
             table_pos++;
