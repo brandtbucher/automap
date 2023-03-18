@@ -372,19 +372,15 @@ def plot_performance(frame):
     fig, axes = plt.subplots(cat_total, fixture_total)
 
     # cmap = plt.get_cmap('terrain')
-
     cmap = plt.get_cmap("plasma")
     color = cmap(np.arange(processor_total) / processor_total)
-    # category is the size of the array
 
-    # size is used to form each row
+    # category is the size of the array
     for cat_count, (cat_label, cat) in enumerate(frame.groupby("size")):
+
         # fixture is the data type fixture
         fixture_data = {fix_label: fix for fix_label, fix in cat.groupby("fixture")}
         for fixture_count, fixture_label in enumerate(FF_ORDER):
-            # for fixture_count, (fixture_label, fixture) in enumerate(
-            #     cat.groupby("fixture")
-            # ):
             fixture = fixture_data[fixture_label]
             ax = axes[cat_count][fixture_count]
 
