@@ -192,7 +192,166 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 10
+
+
+class FixtureFactory:
+    NAME = ""
+    SORT = 0
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        raise NotImplementedError()
+
+    @classmethod
+    def get_label_array(cls, size: int) -> tp.Tuple[str, np.ndarray]:
+        array = cls.get_array(size)
+        return cls.NAME, array
+
+
+class FFInt64(FixtureFactory):
+    NAME = "int64"
+    SORT = 0
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.arange(size, dtype=np.int64)
+        array.flags.writeable = False
+        return array
+
+
+class FFInt32(FixtureFactory):
+    NAME = "int32"
+    SORT = 1
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.arange(size, dtype=np.int32)
+        array.flags.writeable = False
+        return array
+
+
+class FFUInt64(FixtureFactory):
+    NAME = "uint64"
+    SORT = 2
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.arange(size, dtype=np.uint64)
+        array.flags.writeable = False
+        return array
+
+
+class FFFloat64(FixtureFactory):
+    NAME = "float64"
+    SORT = 3
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = (np.arange(size) * 0.5).astype(np.float64)
+        array.flags.writeable = False
+        return array
+
+
+class FFFloat32(FixtureFactory):
+    NAME = "float32"
+    SORT = 4
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = (np.arange(size) * 0.5).astype(np.float32)
+        array.flags.writeable = False
+        return array
+
+
+class FFString(FixtureFactory):
+    NAME = "string"
+    SORT = 6
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.array([hex(e) for e in range(size)])
+        array.flags.writeable = False
+        return array
+
+
+class FFString4x(FixtureFactory):
+    NAME = "string 4x"
+    SORT = 7
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.array([hex(e) * 4 for e in range(size)])
+        array.flags.writeable = False
+        return array
+
+
+class FFBytes(FixtureFactory):
+    NAME = "bytes"
+    SORT = 8
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        array = np.array([bytes(hex(e), encoding="utf-8") for e in range(size)])
+        array.flags.writeable = False
+        return array
+
+
+class FFObject(FixtureFactory):
+    NAME = "object"
+    SORT = 5
+
+    @staticmethod
+    def get_array(size: int) -> np.ndarray:
+        ints = np.arange(size)
+        array = ints.astype(object)
+
+        target = 1 == ints % 3
+        array[target] = ints[target] * 0.5
+
+        target = 2 == ints % 3
+        array[target] = np.array([hex(e) for e in ints[target]])
+
+        array.flags.writeable = False
+        return array
+
+
+def get_versions() -> str:
+    import platform
+
+    return f"OS: {platform.system()} / AutoMap / NumPy: {np.__version__}\n"
+
+
+CLS_PROCESSOR = (
+    FAMLInstantiate,
+    FAMAInstantiate,
+    AMAInstantiate,
+    # FAMAtolistInstantiate,
+    DictInstantiate,
+    FAMLLookup,
+    FAMALookup,
+    DictLookup,
+    FAMLNotIn,
+    FAMANotIn,
+    DictNotIn,
+    # FAMLKeys,
+    # FAMAKeys,
+    # DictKeys,
+)
+
+CLS_FF = (
+    # FFInt32,
+    FFInt64,
+    FFUInt64,
+    FFFloat64,
+    FFString,
+    FFString4x,
+    FFBytes,
+    FFObject,
+)
+FF_ORDER = [f.NAME for f in sorted(CLS_FF, key=lambda ff: ff.SORT)]
+
+# -------------------------------------------------------------------------------
+NUMBER = 1
 
 from itertools import product
 
@@ -217,13 +376,19 @@ def plot_performance(frame):
     cmap = plt.get_cmap("plasma")
     color = cmap(np.arange(processor_total) / processor_total)
     # category is the size of the array
+
+    # size is used to form each row
     for cat_count, (cat_label, cat) in enumerate(frame.groupby("size")):
-        for fixture_count, (fixture_label, fixture) in enumerate(
-            cat.groupby("fixture")
-        ):
+        # fixture is the data type fixture
+        fixture_data = {fix_label: fix for fix_label, fix in cat.groupby("fixture")}
+        for fixture_count, fixture_label in enumerate(FF_ORDER):
+            # for fixture_count, (fixture_label, fixture) in enumerate(
+            #     cat.groupby("fixture")
+            # ):
+            fixture = fixture_data[fixture_label]
             ax = axes[cat_count][fixture_count]
 
-            # set order
+            # set order by cls_processor, i.e., the type of test being done
             fixture["sort"] = [f.SORT for f in fixture["cls_processor"]]
             fixture = fixture.sort_values("sort")
 
@@ -280,155 +445,6 @@ def plot_performance(frame):
         os.system(f"eog {fp}&")
     else:
         os.system(f"open {fp}")
-
-
-# -------------------------------------------------------------------------------
-
-
-class FixtureFactory:
-    NAME = ""
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        raise NotImplementedError()
-
-    @classmethod
-    def get_label_array(cls, size: int) -> tp.Tuple[str, np.ndarray]:
-        array = cls.get_array(size)
-        return cls.NAME, array
-
-
-class FFInt64(FixtureFactory):
-    NAME = "int64"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        array = np.arange(size, dtype=np.int64)
-        array.flags.writeable = False
-        return array
-
-
-class FFInt32(FixtureFactory):
-    NAME = "int32"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        array = np.arange(size, dtype=np.int32)
-        array.flags.writeable = False
-        return array
-
-
-class FFUInt64(FixtureFactory):
-    NAME = "uint64"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        array = np.arange(size, dtype=np.uint64)
-        array.flags.writeable = False
-        return array
-
-
-class FFFloat64(FixtureFactory):
-    NAME = "float64"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        array = (np.arange(size) * 0.5).astype(np.float64)
-        array.flags.writeable = False
-        return array
-
-
-class FFFloat32(FixtureFactory):
-    NAME = "float32"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        array = (np.arange(size) * 0.5).astype(np.float32)
-        array.flags.writeable = False
-        return array
-
-
-class FFString(FixtureFactory):
-    NAME = "string"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        array = np.array([hex(e) for e in range(size)])
-        array.flags.writeable = False
-        return array
-
-
-class FFString4x(FixtureFactory):
-    NAME = "string 4x"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        array = np.array([hex(e) * 4 for e in range(size)])
-        array.flags.writeable = False
-        return array
-
-
-class FFBytes(FixtureFactory):
-    NAME = "bytes"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        array = np.array([bytes(hex(e), encoding="utf-8") for e in range(size)])
-        array.flags.writeable = False
-        return array
-
-
-class FFObject(FixtureFactory):
-    NAME = "object"
-
-    @staticmethod
-    def get_array(size: int) -> np.ndarray:
-        ints = np.arange(size)
-        array = ints.astype(object)
-
-        target = 1 == ints % 3
-        array[target] = ints[target] * 0.5
-
-        target = 2 == ints % 3
-        array[target] = np.array([hex(e) for e in ints[target]])
-
-        array.flags.writeable = False
-        return array
-
-
-def get_versions() -> str:
-    import platform
-
-    return f"OS: {platform.system()} / AutoMap / NumPy: {np.__version__}\n"
-
-
-CLS_PROCESSOR = (
-    FAMLInstantiate,
-    FAMAInstantiate,
-    AMAInstantiate,
-    # FAMAtolistInstantiate,
-    DictInstantiate,
-    FAMLLookup,
-    FAMALookup,
-    DictLookup,
-    FAMLNotIn,
-    FAMANotIn,
-    DictNotIn,
-    # FAMLKeys,
-    # FAMAKeys,
-    # DictKeys,
-)
-
-CLS_FF = (
-    # FFInt32,
-    FFInt64,
-    FFUInt64,
-    FFFloat64,
-    FFString,
-    FFString4x,
-    FFBytes,
-    FFObject,
-)
 
 
 def run_test():
