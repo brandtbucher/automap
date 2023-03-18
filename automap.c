@@ -696,7 +696,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     }
 }
 
-
+// For these integers, the key is used as the hash.
 static Py_ssize_t
 lookup_hash_int(FAMObject *self, npy_int64 key)
 {
@@ -1460,8 +1460,9 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         }
         int array_t = PyArray_TYPE(a);
         int is_i = PyTypeNum_ISSIGNED(array_t);
-        int is_f = PyTypeNum_ISFLOAT(array_t);
         int is_U = array_t == NPY_UNICODE;
+        int is_f = PyTypeNum_ISFLOAT(array_t);
+        // int is_f = array_t == NPY_FLOAT64;
 
         if (cls != &AMType && (is_i || is_f || is_U)) {
             if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {

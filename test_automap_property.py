@@ -65,7 +65,7 @@ def test_am___contains__(keys: Keys, others: Keys) -> None:
 
 # @given(keys=get_array())
 # def test_fam_array___contains__(keys: Keys) -> None:
-#     keys.flags.writeable = False
+#     # NOTE: issues with sub 64 bit ints
 #     a = FrozenAutoMap(keys)
 #     for key in keys:
 #         assert key in a

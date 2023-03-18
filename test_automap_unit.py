@@ -145,7 +145,7 @@ def test_fam_array_int_get_b():
     assert fam.get(1.1) is None
 
 
-def test_fam_array_int_get_c():
+def test_fam_array_int_get_c1():
     a1 = np.array((1, 5, 10, 20), dtype=np.int16)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
@@ -155,6 +155,22 @@ def test_fam_array_int_get_c():
     assert fam.get(True) == 0
     assert fam.get(a1[2]) == 2
     assert fam.get(20.0) == 3
+
+
+def test_fam_array_int_get_c2():
+    a1 = np.array((1,), dtype=np.int16)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    for k in a1:
+        assert k in fam
+
+
+def test_fam_array_int_get_c3():
+    a1 = np.array((19037,), dtype=np.int16)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    for k in a1:
+        assert k in fam
 
 
 def test_fam_array_int_get_d():
