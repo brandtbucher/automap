@@ -222,6 +222,7 @@ typedef enum {
 } ViewKind;
 
 
+// NOTE: would like to use strchr(str, '\0') instead of this routine, but some buffers might not have a null terminator and stread by full to the the dt_size.
 static inline Py_UCS4*
 ucs4_get_end_p(Py_UCS4* p, Py_ssize_t dt_size) {
     Py_UCS4* p_end = p + dt_size;
@@ -865,9 +866,6 @@ lookup_hash_unicode(
     int result = -1;
     Py_hash_t h = 0;
     Py_UCS4* p_start = NULL;
-    // Py_UCS4* p = NULL;
-    // Py_UCS4* key_p = NULL;
-    // Py_UCS4* p_end = NULL;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
