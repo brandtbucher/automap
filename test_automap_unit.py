@@ -189,6 +189,67 @@ def test_fam_array_int_get_d():
 # ------------------------------------------------------------------------------
 
 
+def test_fam_array_uint_get_a():
+    a1 = np.array((1, 100, 300, 4000), dtype=np.uint64)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1) == 0
+    assert fam.get(True) == 0
+    assert fam.get(a1[2]) == 2
+    assert fam.get(1.0) == 0
+
+    for k in a1:
+        assert k in fam
+
+def test_fam_array_uint_get_b():
+    a1 = np.arange(0, 100, dtype=np.uint32)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1) == 1
+    assert fam.get(True) == 1
+    assert fam.get(a1[2]) == 2
+    assert fam.get(1.0) == 1
+
+    for k in a1:
+        assert k in fam
+
+
+def test_fam_array_uint_get_c():
+    a1 = np.arange(0, 100, dtype=np.uint16)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1) == 1
+    assert fam.get(True) == 1
+    assert fam.get(a1[2]) == 2
+    assert fam.get(1.0) == 1
+
+    for k in a1:
+        assert k in fam
+
+
+def test_fam_array_uint_get_d():
+    a1 = np.arange(0, 100, dtype=np.uint8)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    assert fam.get("f") is None
+    assert fam.get(1) == 1
+    assert fam.get(True) == 1
+    assert fam.get(a1[2]) == 2
+    assert fam.get(1.0) == 1
+
+    for k in a1:
+        assert k in fam
+
+# ------------------------------------------------------------------------------
+
+
 def test_fam_array_float_get_a():
     a1 = np.array((1.5, 10.2, 8.8), dtype=np.float64)
     a1.flags.writeable = False
