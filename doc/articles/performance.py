@@ -192,7 +192,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-NUMBER = 10
+NUMBER = 200
 
 from itertools import product
 
