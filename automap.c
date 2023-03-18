@@ -232,9 +232,9 @@ ucs4_get_end_p(Py_UCS4* p, Py_ssize_t dt_size) {
 }
 
 
-Py_hash_t
+static inline Py_hash_t
 uint_to_hash(npy_uint64 v) {
-    return trunc(v * 0.5);
+    return v >> 1;
 }
 
 
