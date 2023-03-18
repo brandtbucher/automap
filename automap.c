@@ -960,8 +960,13 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
     return 0;
 }
 
+// NOTE: `hash` argument is not used, bit is hear to provide the same interface.
 static int
-insert_int(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
+insert_int(
+        FAMObject *self,
+        npy_int64 key,
+        Py_ssize_t keys_pos,
+        Py_hash_t hash)
 {
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos;
@@ -980,7 +985,11 @@ insert_int(FAMObject *self, npy_int64 key, Py_ssize_t keys_pos)
 }
 
 static int
-insert_float(FAMObject *self, npy_double key, Py_ssize_t keys_pos, Py_hash_t hash)
+insert_float(
+        FAMObject *self,
+        npy_double key,
+        Py_ssize_t keys_pos,
+        Py_hash_t hash)
 {
     if (hash == -1) {
         hash = double_to_hash(key);
@@ -1393,6 +1402,32 @@ fam_values(FAMObject *self)
     return famv_new(self, VALUES);
 }
 
+// This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_new` to get `self`, `contguous`, `a`, `keys_size`, and `i`.
+# define INSERT_SCALARS(npy_type, insert_func)          \
+if (contiguous) {                                       \
+    npy_type* b = (npy_type*)PyArray_DATA(a);           \
+    npy_type* b_end = b + keys_size;                    \
+    while (b < b_end) {                                 \
+        if (insert_func(self, *b, i, -1)) {             \
+            goto error;                                 \
+        }                                               \
+        b++;                                            \
+        i++;                                            \
+    }                                                   \
+}                                                       \
+else {                                                  \
+    for (; i < keys_size; i++) {                        \
+        if (insert_func(self,                           \
+                *(npy_type*)PyArray_GETPTR1(a, i),      \
+                i,                                      \
+                -1)) {                                  \
+            goto error;                                 \
+        }                                               \
+    }                                                   \
+}                                                       \
+
+
+
 static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
@@ -1430,7 +1465,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 
         if (cls != &AMType && (is_i || is_f || is_U)) {
             if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {
-                PyErr_Format(PyExc_TypeError, "integer, unicode Arrays must be immutable when given to a %s", name);
+                PyErr_Format(PyExc_TypeError, "integer, float, & unicode Arrays must be immutable when given to a %s", name);
                 return NULL;
             }
             keys_array_type = at_to_kat(array_t);
@@ -1478,79 +1513,35 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     Py_ssize_t i = 0;
     if (keys_array_type) {
         PyArrayObject *a = (PyArrayObject *)self->keys;
-        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
         int contiguous = PyArray_IS_C_CONTIGUOUS(a);
-
-        if (keys_array_type == KAT_UNICODE) {
-            // Over allocate 1 so there is room for null at end. This is only used in lookup();
-            self->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
-        }
 
         switch (keys_array_type) {
             case KAT_INT64:
-                for (; i < keys_size; i++) {
-                    if (insert_int(self, *(npy_int64*)PyArray_GETPTR1(a, i), i)) {
-                        goto error;
-                    }
-                }
+                INSERT_SCALARS(npy_int64, insert_int);
                 break;
             case KAT_INT32:
-                for (; i < keys_size; i++) {
-                    if (insert_int(self, *(npy_int32*)PyArray_GETPTR1(a, i), i)) {
-                        goto error;
-                    }
-                }
+                INSERT_SCALARS(npy_int32, insert_int);
                 break;
             case KAT_INT16:
-                for (; i < keys_size; i++) {
-                    if (insert_int(self, *(npy_int16*)PyArray_GETPTR1(a, i), i)) {
-                        goto error;
-                    }
-                }
+                INSERT_SCALARS(npy_int16, insert_int);
                 break;
             case KAT_INT8:
-                for (; i < keys_size; i++) {
-                    if (insert_int(self, *(npy_int8*)PyArray_GETPTR1(a, i), i)) {
-                        goto error;
-                    }
-                }
+                INSERT_SCALARS(npy_int8, insert_int);
                 break;
             case KAT_FLOAT64:
-                if (contiguous) {
-                    npy_double* b = (npy_double*)PyArray_DATA(a);
-                    npy_double* b_end = b + keys_size;
-                    while (b < b_end) {
-                        if (insert_float(self, *b, i, -1)) {
-                            goto error;
-                        }
-                        b++;
-                        i++;
-                    }
-                }
-                else {
-                    for (; i < keys_size; i++) {
-                        if (insert_float(self, *(npy_double*)PyArray_GETPTR1(a, i), i, -1)) {
-                            goto error;
-                        }
-                    }
-                }
+                INSERT_SCALARS(npy_double, insert_float);
                 break;
             case KAT_FLOAT32:
-                for (; i < keys_size; i++) {
-                    if (insert_float(self, *(npy_float*)PyArray_GETPTR1(a, i), i, -1)) {
-                        goto error;
-                    }
-                }
+                INSERT_SCALARS(npy_float, insert_float);
                 break;
             case KAT_FLOAT16:
-                for (; i < keys_size; i++) {
-                    if (insert_float(self, *(npy_half*)PyArray_GETPTR1(a, i), i, -1)) {
-                        goto error;
-                    }
-                }
+                INSERT_SCALARS(npy_half, insert_float);
                 break;
-
             case KAT_UNICODE: {
+                // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
+                Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+                self->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
+
                 Py_UCS4* p = NULL;
                 if (contiguous) {
                     Py_UCS4 *b = (Py_UCS4*)PyArray_DATA(a);
