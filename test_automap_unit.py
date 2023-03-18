@@ -203,6 +203,7 @@ def test_fam_array_uint_get_a():
     for k in a1:
         assert k in fam
 
+
 def test_fam_array_uint_get_b():
     a1 = np.arange(0, 100, dtype=np.uint32)
     a1.flags.writeable = False
@@ -246,6 +247,7 @@ def test_fam_array_uint_get_d():
 
     for k in a1:
         assert k in fam
+
 
 # ------------------------------------------------------------------------------
 
