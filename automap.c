@@ -279,7 +279,7 @@ double_to_hash(double v)
 }
 
 // This is a "djb2" hash algorithm.
-Py_hash_t
+static inline Py_hash_t
 UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
     Py_UCS4* p = str;
     Py_UCS4* p_end = str + len;
