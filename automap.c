@@ -214,7 +214,7 @@ typedef struct {
     PyObject *keys;
     KeysArrayType keys_array_type;
     Py_ssize_t keys_size;
-    void* key_buffer; // void* if we need to switch between Py_UCS4* and char*
+    Py_UCS4* key_buffer;
 } FAMObject;
 
 
@@ -1049,12 +1049,25 @@ lookup(FAMObject *self, PyObject *key) {
             return -1;
         }
         // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and still discover the lookup
-        if (!PyUnicode_AsUCS4(key, (Py_UCS4*)self->key_buffer, dt_size+1, 1)) {
+        if (!PyUnicode_AsUCS4(key, self->key_buffer, dt_size+1, 1)) {
             return -1; // exception will be set
         }
-        // rather than allocate on every call, explore storing on teh FAM
-        Py_hash_t hash = UCS4_to_hash((Py_UCS4*)self->key_buffer, k_size);
-        table_pos = lookup_hash_unicode(self, (Py_UCS4*)self->key_buffer, k_size, hash);
+        Py_hash_t hash = UCS4_to_hash(self->key_buffer, k_size);
+        table_pos = lookup_hash_unicode(self, self->key_buffer, k_size, hash);
+    }
+    else if (self->keys_array_type == KAT_STRING) {
+        if (!PyBytes_Check(key)) {
+            return -1;
+        }
+        PyArrayObject *a = (PyArrayObject *)self->keys;
+        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize;
+        Py_ssize_t k_size = PyBytes_GET_SIZE(key);
+        if (k_size > dt_size) {
+            return -1;
+        }
+        char* k = PyBytes_AS_STRING(key);
+        Py_hash_t hash = char_to_hash(k, k_size);
+        table_pos = lookup_hash_string(self, k, k_size, hash);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -1336,13 +1349,7 @@ copy(PyTypeObject *cls, FAMObject *self)
         PyArrayObject *a = (PyArrayObject *)new->keys;
         Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
         // keep as void, cast when used
-        new->key_buffer = (void*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
-    }
-    else if (new->keys_array_type == KAT_STRING) {
-        PyArrayObject *a = (PyArrayObject *)new->keys;
-        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(char);
-        // keep as void, cast when used
-        new->key_buffer = (void*)PyMem_Malloc((dt_size+1) * sizeof(char));
+        new->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
     }
 
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
@@ -1763,7 +1770,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             case KAT_UNICODE: {
                 // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
                 Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-                self->key_buffer = (void*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
+                self->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
 
                 Py_UCS4* p = NULL;
                 if (contiguous) {
@@ -1793,7 +1800,6 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             case KAT_STRING: {
                 // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
                 Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(char);
-                self->key_buffer = (void*)PyMem_Malloc((dt_size+1) * sizeof(char));
 
                 char* p = NULL;
                 if (contiguous) {

@@ -113,14 +113,23 @@ def test_fam_constructor_array_bytes_b():
         fam = FrozenAutoMap(a1)
 
 
-# def test_fam_copy_array_bytes_a():
-#     a1 = np.array(("a", "ccc", "bb"))
-#     a1.flags.writeable = False
-#     fam1 = FrozenAutoMap(a1)
-#     fam2 = FrozenAutoMap(fam1)
-#     assert fam2["a"] == 0
-#     assert fam2["ccc"] == 1
-#     assert fam2["bb"] == 2
+def test_fam_constructor_array_bytes_c():
+    a1 = np.array((b"aaa", b"b", b"cc"))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    assert fam[b"aaa"] == 0
+    assert fam[b"b"] == 1
+    assert fam[b"cc"] == 2
+
+
+def test_fam_copy_array_bytes_a():
+    a1 = np.array((b"a", b"ccc", b"bb"))
+    a1.flags.writeable = False
+    fam1 = FrozenAutoMap(a1)
+    fam2 = FrozenAutoMap(fam1)
+    assert fam2[b"a"] == 0
+    assert fam2[b"ccc"] == 1
+    assert fam2[b"bb"] == 2
 
 
 # ------------------------------------------------------------------------------
