@@ -100,6 +100,32 @@ def test_fam_copy_array_unicode_a():
 # ------------------------------------------------------------------------------
 
 
+def test_fam_constructor_array_bytes_a():
+    a1 = np.array((b"a", b"b", b"c"))
+    with pytest.raises(TypeError):
+        fam = FrozenAutoMap(a1)
+
+
+def test_fam_constructor_array_bytes_b():
+    a1 = np.array((b"aaa", b"b", b"aaa"))
+    a1.flags.writeable = False
+    with pytest.raises(NonUniqueError):
+        fam = FrozenAutoMap(a1)
+
+
+# def test_fam_copy_array_bytes_a():
+#     a1 = np.array(("a", "ccc", "bb"))
+#     a1.flags.writeable = False
+#     fam1 = FrozenAutoMap(a1)
+#     fam2 = FrozenAutoMap(fam1)
+#     assert fam2["a"] == 0
+#     assert fam2["ccc"] == 1
+#     assert fam2["bb"] == 2
+
+
+# ------------------------------------------------------------------------------
+
+
 def test_fam_array_len_a():
     a1 = np.array((10, 20, 30, 40), dtype=np.int64)
     a1.flags.writeable = False

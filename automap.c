@@ -166,6 +166,7 @@ typedef enum {
     KAT_FLOAT64,
 
     KAT_UNICODE,
+    KAT_STRING,
 } KeysArrayType;
 
 
@@ -199,6 +200,8 @@ at_to_kat(int array_t) {
 
         case NPY_UNICODE:
             return KAT_UNICODE;
+        case NPY_STRING:
+            return KAT_STRING;
         default:
             return KAT_LIST;
     }
@@ -211,7 +214,7 @@ typedef struct {
     PyObject *keys;
     KeysArrayType keys_array_type;
     Py_ssize_t keys_size;
-    Py_UCS4* key_buffer; // could be void* if we need to switch between Py_UCS4* and char*
+    void* key_buffer; // void* if we need to switch between Py_UCS4* and char*
 } FAMObject;
 
 
@@ -226,6 +229,16 @@ typedef enum {
 static inline Py_UCS4*
 ucs4_get_end_p(Py_UCS4* p, Py_ssize_t dt_size) {
     Py_UCS4* p_end = p + dt_size;
+    while (p < p_end && *p != '\0') {
+        p++;
+    }
+    return p;
+}
+
+
+static inline char*
+char_get_end_p(char* p, Py_ssize_t dt_size) {
+    char* p_end = p + dt_size;
     while (p < p_end && *p != '\0') {
         p++;
     }
@@ -284,6 +297,18 @@ static inline Py_hash_t
 UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
     Py_UCS4* p = str;
     Py_UCS4* p_end = str + len;
+    Py_hash_t hash = 5381;
+    while (p < p_end) {
+        hash = ((hash << 5) + hash) + *p++;
+    }
+    return hash;
+}
+
+
+static inline Py_hash_t
+char_to_hash(char *str, Py_ssize_t len) {
+    char* p = str;
+    char* p_end = str + len;
     Py_hash_t hash = 5381;
     while (p < p_end) {
         hash = ((hash << 5) + hash) + *p++;
@@ -890,6 +915,49 @@ lookup_hash_unicode(
     }
 }
 
+// Compare a passed char array to stored keys. This does not use any dynamic memory. Returns -1 on error.
+static Py_ssize_t
+lookup_hash_string(
+        FAMObject *self,
+        char* key,
+        Py_ssize_t key_size,
+        Py_hash_t hash)
+{
+    TableElement *table = self->table;
+    Py_ssize_t mask = self->table_size - 1;
+    Py_hash_t mixin = Py_ABS(hash);
+    Py_ssize_t table_pos = hash & mask;
+
+    PyArrayObject *a = (PyArrayObject *)self->keys;
+    Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(char);
+
+    int result = -1;
+    Py_hash_t h = 0;
+    char* p_start = NULL;
+
+    while (1) {
+        for (Py_ssize_t i = 0; i < SCAN; i++) {
+            h = table[table_pos].hash;
+            if (h == -1) { // Miss. Found a position that can be used for insertion.
+                return table_pos;
+            }
+            if (h != hash) { // Collision.
+                table_pos++;
+                continue;
+            }
+            result = 1;
+            p_start = (char*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
+            // returns 0 on match
+            result = memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size));
+            if (!result) { // Hit.
+                return table_pos;
+            }
+            table_pos++;
+        }
+        table_pos = (5 * (table_pos - SCAN) + (mixin >>= 1) + 1) & mask;
+    }
+}
+
 // Given a key as a PyObject, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
 static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
@@ -981,12 +1049,12 @@ lookup(FAMObject *self, PyObject *key) {
             return -1;
         }
         // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and still discover the lookup
-        if (!PyUnicode_AsUCS4(key, self->key_buffer, dt_size+1, 1)) {
+        if (!PyUnicode_AsUCS4(key, (Py_UCS4*)self->key_buffer, dt_size+1, 1)) {
             return -1; // exception will be set
         }
         // rather than allocate on every call, explore storing on teh FAM
-        Py_hash_t hash = UCS4_to_hash(self->key_buffer, k_size);
-        table_pos = lookup_hash_unicode(self, self->key_buffer, k_size, hash);
+        Py_hash_t hash = UCS4_to_hash((Py_UCS4*)self->key_buffer, k_size);
+        table_pos = lookup_hash_unicode(self, (Py_UCS4*)self->key_buffer, k_size, hash);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -1135,6 +1203,36 @@ insert_unicode(
     return 0;
 }
 
+
+static int
+insert_string(
+        FAMObject *self,
+        char* key,
+        Py_ssize_t key_size,
+        Py_ssize_t keys_pos,
+        Py_hash_t hash)
+{
+    if (hash == -1) {
+        hash = char_to_hash(key, key_size);
+    }
+    // table position is not dependent on keys_pos
+    Py_ssize_t table_pos;
+    table_pos = lookup_hash_string(self, key, key_size, hash);
+    if (table_pos < 0) {
+        return -1;
+    }
+    if (self->table[table_pos].hash != -1) {
+        PyErr_SetObject(NonUniqueError,
+            PyBytes_FromStringAndSize(key, key_size));
+        return -1;
+    }
+    self->table[table_pos].keys_pos = keys_pos;
+    self->table[table_pos].hash = hash;
+    return 0;
+}
+
+
+
 // Called in fam_new(), extend(), append(), with the size of observed keys. This table is updated only when append or extending. Only if there is an old table will keys be accessed Returns 0 on success, -1 on failure.
 static int
 grow_table(FAMObject *self, Py_ssize_t keys_size)
@@ -1237,8 +1335,16 @@ copy(PyTypeObject *cls, FAMObject *self)
     if (new->keys_array_type == KAT_UNICODE) {
         PyArrayObject *a = (PyArrayObject *)new->keys;
         Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-        new->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
+        // keep as void, cast when used
+        new->key_buffer = (void*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
     }
+    else if (new->keys_array_type == KAT_STRING) {
+        PyArrayObject *a = (PyArrayObject *)new->keys;
+        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(char);
+        // keep as void, cast when used
+        new->key_buffer = (void*)PyMem_Malloc((dt_size+1) * sizeof(char));
+    }
+
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
     new->table = PyMem_New(TableElement, table_size_alloc);
     if (!new->table) {
@@ -1560,9 +1666,12 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         int is_u = PyTypeNum_ISUNSIGNED(array_t);
         int is_f = PyTypeNum_ISFLOAT(array_t);
         int is_U = array_t == NPY_UNICODE;
+        int is_S = array_t == NPY_STRING;
+
         // int is_f = array_t == NPY_FLOAT64;
 
-        if (cls != &AMType && (is_i || is_u || is_f || is_U)) {
+        if (cls != &AMType
+                && (is_i || is_u || is_f || is_U || is_S)) {
             if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {
                 PyErr_Format(PyExc_TypeError, "integer, float, & unicode Arrays must be immutable when given to a %s", name);
                 return NULL;
@@ -1654,7 +1763,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             case KAT_UNICODE: {
                 // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
                 Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-                self->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
+                self->key_buffer = (void*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
 
                 Py_UCS4* p = NULL;
                 if (contiguous) {
@@ -1680,6 +1789,37 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                 }
                 break;
             }
+
+            case KAT_STRING: {
+                // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
+                Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(char);
+                self->key_buffer = (void*)PyMem_Malloc((dt_size+1) * sizeof(char));
+
+                char* p = NULL;
+                if (contiguous) {
+                    char *b = (char*)PyArray_DATA(a);
+                    char *b_end = b + keys_size * dt_size;
+                    while (b < b_end) {
+                        p = char_get_end_p(b, dt_size);
+                        if (insert_string(self, b, p-b, i, -1)) {
+                            goto error;
+                        }
+                        b += dt_size;
+                        i++;
+                    }
+                }
+                else {
+                    for (; i < keys_size; i++) {
+                        char* v = (char*)PyArray_GETPTR1(a, i);
+                        p = char_get_end_p(v, dt_size);
+                        if (insert_string(self, v, p-v, i, -1)) {
+                            goto error;
+                        }
+                    }
+                }
+                break;
+            }
+
         }
 
     }
