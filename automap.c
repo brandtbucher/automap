@@ -1023,15 +1023,32 @@ lookup(FAMObject *self, PyObject *key) {
         double v = 0;
         if (PyFloat_Check(key)) {
             v = PyFloat_AsDouble(key);
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                return -1;
+            }
+        }
+        else if (PyArray_IsScalar(key, Double)) {
+            PyArray_ScalarAsCtype(key, &v);
+        }
+        else if (PyArray_IsScalar(key, Float)) {
+            float temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (double)temp;
+        }
+        else if (PyArray_IsScalar(key, Half)) {
+            npy_half temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (npy_half)temp;
         }
         else if (PyNumber_Check(key)) {
             v = (double)PyNumber_AsSsize_t(key, PyExc_OverflowError);
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                return -1;
+            }
         }
         else {
-            return -1;
-        }
-        if (PyErr_Occurred()) {
-            PyErr_Clear();
             return -1;
         }
         Py_hash_t hash = double_to_hash(v);

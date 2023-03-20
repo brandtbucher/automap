@@ -66,9 +66,17 @@ def test_am___contains__(keys: Keys, others: Keys) -> None:
 # @given(keys=get_array())
 # def test_fam_array___contains__(keys: Keys) -> None:
 #     # NOTE: issues with sub 64 bit ints
-#     a = FrozenAutoMap(keys)
+#     fam = FrozenAutoMap(keys)
 #     for key in keys:
-#         assert key in a
+#         assert key in fam
+
+# print(key, keys, fam)
+# try:
+#     assert key in fam
+# except:
+#     import ipdb
+
+#     ipdb.set_trace()
 
 
 @given(keys=hypothesis.infer, others=hypothesis.infer)
