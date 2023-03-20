@@ -1021,14 +1021,7 @@ lookup(FAMObject *self, PyObject *key) {
     else if (self->keys_array_type >= KAT_FLOAT16
             && self->keys_array_type <= KAT_FLOAT64) {
         double v = 0;
-        if (PyFloat_Check(key)) {
-            v = PyFloat_AsDouble(key);
-            if (PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
-        }
-        else if (PyArray_IsScalar(key, Double)) {
+        if (PyArray_IsScalar(key, Double)) {
             PyArray_ScalarAsCtype(key, &v);
         }
         else if (PyArray_IsScalar(key, Float)) {
@@ -1040,6 +1033,13 @@ lookup(FAMObject *self, PyObject *key) {
             npy_half temp;
             PyArray_ScalarAsCtype(key, &temp);
             v = (npy_half)temp;
+        }
+        else if (PyFloat_Check(key)) {
+            v = PyFloat_AsDouble(key);
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                return -1;
+            }
         }
         else if (PyNumber_Check(key)) {
             v = (double)PyNumber_AsSsize_t(key, PyExc_OverflowError);
