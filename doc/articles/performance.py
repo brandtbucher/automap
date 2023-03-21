@@ -2,6 +2,7 @@ import os
 import sys
 import timeit
 import typing as tp
+from typing import NamedTuple
 from itertools import repeat
 
 import automap
@@ -15,16 +16,25 @@ import pandas as pd
 sys.path.append(os.getcwd())
 
 
-class MapProcessor:
-    NAME = ""
-    SORT = -1
-
+class PayLoad:
     def __init__(self, array: np.ndarray):
         self.array = array
         self.list = array.tolist()
         self.faml = FrozenAutoMap(self.list)
         self.fama = FrozenAutoMap(self.array)
         self.d = dict(zip(self.list, range(len(self.list))))
+
+
+class MapProcessor:
+    NAME = ""
+    SORT = -1
+
+    def __init__(self, pl: PayLoad):
+        self.array = pl.array
+        self.list = pl.list
+        self.faml = pl.faml
+        self.fama = pl.fama
+        self.d = pl.d
 
 
 # -------------------------------------------------------------------------------
@@ -103,6 +113,7 @@ class DictLookup(MapProcessor):
         for k in self.list:
             _ = m[k]
 
+
 # -------------------------------------------------------------------------------
 class FAMLLookupScalar(MapProcessor):
     NAME = "FAM(L): lookup AS"
@@ -132,6 +143,7 @@ class DictLookupScalar(MapProcessor):
         m = self.d
         for k in self.array:
             _ = m[k]
+
 
 # -------------------------------------------------------------------------------
 class FAMLNotIn(MapProcessor):
@@ -221,20 +233,25 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-INT_START = 500 # avoid cached ints starting at 256
+INT_START = 500  # avoid cached ints starting at 256
+
 
 class FixtureFactory:
     NAME = ""
     SORT = 0
+    CACHE = {}  # can be shared for all classes
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
         raise NotImplementedError()
 
     @classmethod
-    def get_label_array(cls, size: int) -> tp.Tuple[str, np.ndarray]:
-        array = cls.get_array(size)
-        return cls.NAME, array
+    def get_label_array(cls, size: int) -> tp.Tuple[str, PayLoad]:
+        key = (cls, size)
+        if key not in cls.CACHE:
+            pl = PayLoad(cls.get_array(size))
+            cls.CACHE[key] = pl
+        return cls.NAME, cls.CACHE[key]
 
 
 class FFInt64(FixtureFactory):
@@ -254,7 +271,7 @@ class FFInt32(FixtureFactory):
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = np.arange(INT_START, INT_START +size, dtype=np.int32)
+        array = np.arange(INT_START, INT_START + size, dtype=np.int32)
         array.flags.writeable = False
         return array
 
@@ -355,15 +372,12 @@ CLS_PROCESSOR = (
     FAMAInstantiate,
     AMAInstantiate,
     DictInstantiate,
-
     FAMLLookup,
     FAMALookup,
     DictLookup,
-
     FAMLLookupScalar,
     FAMALookupScalar,
     DictLookupScalar,
-
     # FAMLNotIn,
     # FAMANotIn,
     # DictNotIn,
@@ -385,7 +399,7 @@ CLS_FF = (
 FF_ORDER = [f.NAME for f in sorted(CLS_FF, key=lambda ff: ff.SORT)]
 
 # -------------------------------------------------------------------------------
-NUMBER = 200
+NUMBER = 1
 
 from itertools import product
 
