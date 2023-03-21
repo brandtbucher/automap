@@ -15,11 +15,11 @@ Original AutoMap:
 
     The hash "table" is an array of structs, where each item is a pair of hash code and the index into keys list to find the key (struct TableElement)
 
-    Hashing used PyObject_Hash
+    Hashing used PyObject_Hash (lookup())
 
     Comparison to other objects used PyObject_RichCompareBool (lookup_hash())
 
-    On insert, we compute a hash, and lookup hash in the table; we search the table until we find an empty position.
+    On insert, we compute a hash, find a hashble index, and lookup the found hash; we search the table until we find an empty position.
 
     On lookup, we compute a hash and map it to a table_pos; fetching this table position, we see if the hash matches; if so, we fetch the key and compare it; if not a match (or if hashes do not match), we continue searching the table.
 
@@ -32,7 +32,7 @@ Problems with Arrays.
 
     When creating an FrozenAutoMap from an array, those values would be extracted as Scalars into a list.
 
-    It was discovered that for most types, calling `tolist()` first was faster than letting FAM iterate the array and create a list. This created a whole list that was thrown away.
+    It was discovered that for most types, calling `tolist()` first was faster than letting FAM iterate the array and create a list. This created an intermediary list that was thrown away.
 
     The goal of using immutable arrays is no-copy reuse. How can we use this in a FAM?
 
@@ -91,6 +91,35 @@ Second Approach
 Performance
 
     NumPy unicode arrays had particularly bad performance
+
+
+Code
+    fam_new() for normal objects
+        insert()
+        lookup_hash()
+
+    fam_new() for int arrays
+        INSERT_SCALARS()
+        insert_int()
+        lookup_hash_int(): use integer as hash!
+
+    fam_new() for unicode arrays
+        insert_unicode()
+        UCS4_to_hash()
+        lookup_hash_unicode()
+
+    fam_new() for AutoMap
+
+
+
+Next Steps
+
+    Low-bit unsigned ints not always passing lookup.
+
+    Can we use datetime46 arrays directly?
+
+    Code reuse.
+
 
 
 Limitations:
