@@ -103,6 +103,35 @@ class DictLookup(MapProcessor):
         for k in self.list:
             _ = m[k]
 
+# -------------------------------------------------------------------------------
+class FAMLLookupScalar(MapProcessor):
+    NAME = "FAM(L): lookup AS"
+    SORT = 0
+
+    def __call__(self):
+        m = self.faml
+        for k in self.array:
+            _ = m[k]
+
+
+class FAMALookupScalar(MapProcessor):
+    NAME = "FAM(A): lookup AS"
+    SORT = 0
+
+    def __call__(self):
+        m = self.fama
+        for k in self.array:
+            _ = m[k]
+
+
+class DictLookupScalar(MapProcessor):
+    NAME = "Dict: lookup AS"
+    SORT = 0
+
+    def __call__(self):
+        m = self.d
+        for k in self.array:
+            _ = m[k]
 
 # -------------------------------------------------------------------------------
 class FAMLNotIn(MapProcessor):
@@ -192,7 +221,7 @@ class DictItems(MapProcessor):
 
 
 # -------------------------------------------------------------------------------
-
+INT_START = 500 # avoid cached ints starting at 256
 
 class FixtureFactory:
     NAME = ""
@@ -214,7 +243,7 @@ class FFInt64(FixtureFactory):
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = np.arange(size, dtype=np.int64)
+        array = np.arange(INT_START, INT_START + size, dtype=np.int64)
         array.flags.writeable = False
         return array
 
@@ -225,7 +254,7 @@ class FFInt32(FixtureFactory):
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = np.arange(size, dtype=np.int32)
+        array = np.arange(INT_START, INT_START +size, dtype=np.int32)
         array.flags.writeable = False
         return array
 
@@ -236,7 +265,7 @@ class FFUInt64(FixtureFactory):
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = np.arange(size, dtype=np.uint64)
+        array = np.arange(INT_START, INT_START + size, dtype=np.uint64)
         array.flags.writeable = False
         return array
 
@@ -247,7 +276,7 @@ class FFFloat64(FixtureFactory):
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = (np.arange(size) * 0.5).astype(np.float64)
+        array = (np.arange(INT_START, INT_START + size) * 0.5).astype(np.float64)
         array.flags.writeable = False
         return array
 
@@ -258,7 +287,7 @@ class FFFloat32(FixtureFactory):
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        array = (np.arange(size) * 0.5).astype(np.float32)
+        array = (np.arange(INT_START, INT_START + size) * 0.5).astype(np.float32)
         array.flags.writeable = False
         return array
 
@@ -302,7 +331,7 @@ class FFObject(FixtureFactory):
 
     @staticmethod
     def get_array(size: int) -> np.ndarray:
-        ints = np.arange(size)
+        ints = np.arange(INT_START, INT_START + size)
         array = ints.astype(object)
 
         target = 1 == ints % 3
@@ -325,14 +354,19 @@ CLS_PROCESSOR = (
     FAMLInstantiate,
     FAMAInstantiate,
     AMAInstantiate,
-    # FAMAtolistInstantiate,
     DictInstantiate,
+
     FAMLLookup,
     FAMALookup,
     DictLookup,
-    FAMLNotIn,
-    FAMANotIn,
-    DictNotIn,
+
+    FAMLLookupScalar,
+    FAMALookupScalar,
+    DictLookupScalar,
+
+    # FAMLNotIn,
+    # FAMANotIn,
+    # DictNotIn,
     # FAMLKeys,
     # FAMAKeys,
     # DictKeys,
