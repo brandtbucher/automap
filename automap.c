@@ -1083,24 +1083,25 @@ lookup(FAMObject *self, PyObject *key) {
         table_pos = lookup_hash_float(self, v, hash);
     }
     else if (self->keys_array_type == KAT_UNICODE) {
-        if (PyArray_IsScalar(key, Unicode)) {
-            PyArrayObject *a = (PyArrayObject *)self->keys;
-            Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-            Py_ssize_t k_dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+        // NOTE: doing the following does not seem to improve performance and fails on Windows.
+        // if (PyArray_IsScalar(key, Unicode)) {
+        //     PyArrayObject *a = (PyArrayObject *)self->keys;
+        //     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+        //     Py_ssize_t k_dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
 
-            if (k_dt_size > dt_size) {
-                return -1;
-            }
-            Py_UCS4 *key_buffer;
-            PyArray_ScalarAsCtype(key, &key_buffer);
+        //     if (k_dt_size > dt_size) {
+        //         return -1;
+        //     }
+        //     Py_UCS4 *key_buffer;
+        //     PyArray_ScalarAsCtype(key, &key_buffer);
 
-            Py_UCS4 *k_buffer_end = ucs4_get_end_p(key_buffer, k_dt_size);
-            Py_ssize_t k_size = k_buffer_end - key_buffer;
+        //     Py_UCS4 *k_buffer_end = ucs4_get_end_p(key_buffer, k_dt_size);
+        //     Py_ssize_t k_size = k_buffer_end - key_buffer;
 
-            Py_hash_t hash = UCS4_to_hash(key_buffer, k_size);
-            table_pos = lookup_hash_unicode(self, key_buffer, k_size, hash);
-        }
-        else if (PyUnicode_Check(key)) {
+        //     Py_hash_t hash = UCS4_to_hash(key_buffer, k_size);
+        //     table_pos = lookup_hash_unicode(self, key_buffer, k_size, hash);
+        // }
+        if (PyUnicode_Check(key)) {
             PyArrayObject *a = (PyArrayObject *)self->keys;
             Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
             // if the key_size is greater than the dtype size of the array, we know there cannot be a match
