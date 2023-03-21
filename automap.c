@@ -886,6 +886,7 @@ lookup_hash_unicode(
     Py_ssize_t table_pos = hash & mask;
 
     PyArrayObject *a = (PyArrayObject *)self->keys;
+    // REVIEW: is this a new descr reference?
     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
 
     int result = -1;
@@ -1083,8 +1084,21 @@ lookup(FAMObject *self, PyObject *key) {
     }
     else if (self->keys_array_type == KAT_UNICODE) {
         if (PyArray_IsScalar(key, Unicode)) {
-            DEBUG_MSG_OBJ("found unicode scalar", key);
-            return -1;
+            PyArrayObject *a = (PyArrayObject *)self->keys;
+            Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+            Py_ssize_t k_dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+
+            if (k_dt_size > dt_size) {
+                return -1;
+            }
+            Py_UCS4 *key_buffer;
+            PyArray_ScalarAsCtype(key, &key_buffer);
+
+            Py_UCS4 *k_buffer_end = ucs4_get_end_p(key_buffer, k_dt_size);
+            Py_ssize_t k_size = k_buffer_end - key_buffer;
+
+            Py_hash_t hash = UCS4_to_hash(key_buffer, k_size);
+            table_pos = lookup_hash_unicode(self, key_buffer, k_size, hash);
         }
         else if (PyUnicode_Check(key)) {
             PyArrayObject *a = (PyArrayObject *)self->keys;
