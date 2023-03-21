@@ -2,23 +2,91 @@
 
 AutoMap
 
-A specialized dictionary where keys are the only thing that matters
+A specialized dictionary where keys and their ordering are the only thing that matters
 
-A key points to an integer; we want constant time lookup from a key to its ordered position.
+A key points to an integer; we want constant-time lookup from a key to its ordered position.
 
 Original AutoMap:
 
     Took arbitrary iterables and loaded them into an internally managed List
-    The "hash table" is an array of structs, where each item is a pair of hash code, index into keys list of key position
+
+    The "hash table" is an array of structs, where each item is a pair of hash code and the index into keys list to find the key
 
     Hashing used PyObject_Hash
     Comparison to other objects used PyObject_RichCompareBool
 
+    On insert, we compute a hash, and lookup hash in the table; we search the table until we find an empty position.
+
+    On lookup, we compute a hash and map it to a table_pos; fetching this table position, we see if the hash matches; if so, we fetch the key and compare it; if not a match (or if hashes do not match), we continue searching the table.
+
+    Brandt's original implementation used a sequential scan when possible to optimize performance.
 
 
+Problems with Arrays.
+
+    For every SF index, there is an immutable NumPy array of labels.
+
+    When creating an FrozenAutoMap from an array, those values would be extracted as Scalars into a list.
+
+    It was discovered that for most types, calling `tolist()` first was faster than letting FAM iterate the array and create a list. This created a whole list that was thrown away.
+
+    The goal of using immutable arrays is no-copy reuse. How can we use this in a FAM?
+
+    For AutoMap (mutable), we can continue to use a list
 
 
+NumPy Arrays
 
+    A PyObject that wraps (sometimes) contiguous byte data interpreted (with a dtype and strides) as a N-dimensional array data.
+
+    There are two ways to get elements out of an array:
+        as a PyObject
+        as a Scalar
+        Calling `tolist()` creates PyObjects
+        Selection & iteration result in Scalars
+
+    The performance advantage of NumPy is using the byte data and C-types directly, avoiding Py Objects
+
+
+First Approach
+
+    Store immutable array instead of keys list (no-copy)
+
+    For insertion and hashing, use PyArray_GETITEM to get a PyObject
+
+    For lookup, use PyArray_GETITEM to get a PyObject, then use PyObject_RichCompare
+
+    Performance was not improved (memory might have been)
+
+    Using PyArray_ToScalar was slower.
+
+    Problem: still have to create a PyObject for every element on initialization and lookup.
+
+
+Second Approach
+
+    Identify arrays on initialization
+
+    On insert, read C-type from byte-data and pass it to type-specific insertion function.
+
+        If array is contiguous, can do sequential access after extracting PyArray_DATA
+
+        If not, can use PyArray_GETPTR1
+
+    Type-specific insertion can use type-specific hash function (no PyObjects).
+
+    Type-specific lookup can compare a foreign key (as a C type) to value in the array (extracted with PyArray_GETPTR1)
+
+    Generic lookup routines know the type of the stored array: can reject foreign keys by type, before hashing
+
+    Given Scalars, can extract data.
+
+    Given PyObjects, can convert to C-types for type-specific loookup.
+
+
+Performance
+
+    NumPy unicode arrays had particularly bad performance
 
 
 Limitations:

@@ -966,7 +966,34 @@ lookup(FAMObject *self, PyObject *key) {
     if (self->keys_array_type >= KAT_INT8
             && self->keys_array_type <= KAT_INT64) {
         Py_ssize_t v = 0;
-        if (PyFloat_Check(key)) {
+
+        if (PyArray_IsScalar(key, Byte)) {
+            npy_byte temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (Py_ssize_t)temp;
+        }
+        else if (PyArray_IsScalar(key, Short)) {
+            npy_short temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (Py_ssize_t)temp;
+        }
+        else if (PyArray_IsScalar(key, Int)) {
+            npy_int temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (Py_ssize_t)temp;
+        }
+        else if (PyArray_IsScalar(key, Long)) {
+            npy_long temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (Py_ssize_t)temp;
+        }
+        else if (PyArray_IsScalar(key, LongLong)) {
+            npy_longlong temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (Py_ssize_t)temp;
+            DEBUG_MSG_OBJ("longlong", key);
+        }
+        else if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
@@ -1001,7 +1028,7 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
             v = (Py_ssize_t)dv; // truncate to integer
-            if (v != dv) {
+            if (v != dv || v < 0) {
                 return -1;
             }
         }
@@ -1055,22 +1082,28 @@ lookup(FAMObject *self, PyObject *key) {
         table_pos = lookup_hash_float(self, v, hash);
     }
     else if (self->keys_array_type == KAT_UNICODE) {
-        if (!PyUnicode_Check(key)) {
+        if (PyArray_IsScalar(key, Unicode)) {
+            DEBUG_MSG_OBJ("found unicode scalar", key);
             return -1;
         }
-        PyArrayObject *a = (PyArrayObject *)self->keys;
-        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-        // if the key_size is greater than the dtype size of the array, we know there cannot be a match
-        Py_ssize_t k_size = PyUnicode_GetLength(key);
-        if (k_size > dt_size) {
+        else if (PyUnicode_Check(key)) {
+            PyArrayObject *a = (PyArrayObject *)self->keys;
+            Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+            // if the key_size is greater than the dtype size of the array, we know there cannot be a match
+            Py_ssize_t k_size = PyUnicode_GetLength(key);
+            if (k_size > dt_size) {
+                return -1;
+            }
+            // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and still discover the lookup
+            if (!PyUnicode_AsUCS4(key, self->key_buffer, dt_size+1, 1)) {
+                return -1; // exception will be set
+            }
+            Py_hash_t hash = UCS4_to_hash(self->key_buffer, k_size);
+            table_pos = lookup_hash_unicode(self, self->key_buffer, k_size, hash);
+        }
+        else {
             return -1;
         }
-        // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and still discover the lookup
-        if (!PyUnicode_AsUCS4(key, self->key_buffer, dt_size+1, 1)) {
-            return -1; // exception will be set
-        }
-        Py_hash_t hash = UCS4_to_hash(self->key_buffer, k_size);
-        table_pos = lookup_hash_unicode(self, self->key_buffer, k_size, hash);
     }
     else if (self->keys_array_type == KAT_STRING) {
         if (!PyBytes_Check(key)) {

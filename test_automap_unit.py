@@ -51,6 +51,14 @@ def test_fam_constructor_array_int_b():
         fam = FrozenAutoMap(a1)
 
 
+def test_fam_constructor_array_int_c():
+    a1 = np.array((10, 20, 30), dtype=np.int8)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    for k in a1:
+        assert k in fam
+
+
 # def test_fam_constructor_array_a3():
 #     a1 = np.array(("a", "bb", "ccc"))
 #     with pytest.raises(TypeError):
@@ -85,6 +93,14 @@ def test_fam_constructor_array_unicode_a():
     a1.flags.writeable = False
     with pytest.raises(NonUniqueError):
         fam = FrozenAutoMap(a1)
+
+
+def test_fam_constructor_array_unicode_b():
+    a1 = np.array(("a", "bb", "ccc"))
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    for k in a1:
+        assert k in fam
 
 
 def test_fam_copy_array_unicode_a():
