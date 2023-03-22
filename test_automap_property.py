@@ -1,6 +1,7 @@
 import pickle
 import typing
 from functools import partial
+import sys
 
 import numpy as np
 import hypothesis
@@ -17,6 +18,8 @@ from automap import NonUniqueError
 
 Keys = typing.Set[typing.Hashable]
 
+NATIVE_BYTE_ORDER = '<' if sys.byteorder == 'little' else '>'
+VALID_BYTE_ORDERS = ('=', NATIVE_BYTE_ORDER)
 
 def get_array() -> st.SearchStrategy:
     """
@@ -26,6 +29,9 @@ def get_array() -> st.SearchStrategy:
     def proc(a: np.ndarray, contiguous: bool):
         if a.dtype.kind in ("f", "c"):
             a = a[~np.isnan(a)]
+        if a.dtype.byteorder not in VALID_BYTE_ORDERS:
+            a = a.astype(a.dtype.newbyteorder(NATIVE_BYTE_ORDER))
+
         if not contiguous:
             a = np.lib.stride_tricks.as_strided(
                 a,
@@ -63,18 +69,14 @@ def test_am___contains__(keys: Keys, others: Keys) -> None:
         assert key not in a
 
 
-# @given(keys=get_array())
-# def test_fam_array___contains__(keys: Keys) -> None:
-#     # NOTE: issues with sub 64 bit ints
-#     fam = FrozenAutoMap(keys)
-#     for key in keys:
-#         try:
-#             assert key in fam
-#         except:
-#             import ipdb
-
-#             ipdb.set_trace()
-
+@given(keys=get_array())
+def test_fam_array___contains__(keys: Keys) -> None:
+    fam = FrozenAutoMap(keys)
+    for key in keys:
+        try:
+            assert key in fam
+        except:
+            import ipdb; ipdb.set_trace()
 
 @given(keys=hypothesis.infer, others=hypothesis.infer)
 def test_am___getitem__(keys: Keys, others: Keys) -> None:
