@@ -2,6 +2,7 @@ import pickle
 import typing
 from functools import partial
 import sys
+import warnings
 
 import numpy as np
 import hypothesis
@@ -29,6 +30,7 @@ def get_array() -> st.SearchStrategy:
     def proc(a: np.ndarray, contiguous: bool):
         if a.dtype.kind in ("f", "c"):
             a = a[~np.isnan(a)]
+
         if a.dtype.byteorder not in VALID_BYTE_ORDERS:
             a = a.astype(a.dtype.newbyteorder(NATIVE_BYTE_ORDER))
 
@@ -38,6 +40,7 @@ def get_array() -> st.SearchStrategy:
                 shape=(len(a) // 2,),
                 strides=(a.dtype.itemsize * 2,),
             )
+
         a.flags.writeable = False
         return a
 
@@ -173,11 +176,14 @@ def test_am_non_unique_exception(keys: Keys):
 
 @given(keys=get_array())
 def test_fam_non_unique_exception(keys: Keys):
-    hypothesis.assume(keys)
-    duplicate = next(iter(keys))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
 
-    with pytest.raises(ValueError):
-        FrozenAutoMap([*keys, duplicate])
+        hypothesis.assume(keys)
+        duplicate = next(iter(keys))
 
-    with pytest.raises(NonUniqueError):
-        FrozenAutoMap([*keys, duplicate])
+        with pytest.raises(ValueError):
+            FrozenAutoMap([*keys, duplicate])
+
+        with pytest.raises(NonUniqueError):
+            FrozenAutoMap([*keys, duplicate])
