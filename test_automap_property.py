@@ -19,8 +19,9 @@ from automap import NonUniqueError
 
 Keys = typing.Set[typing.Hashable]
 
-NATIVE_BYTE_ORDER = '<' if sys.byteorder == 'little' else '>'
-VALID_BYTE_ORDERS = ('=', NATIVE_BYTE_ORDER)
+NATIVE_BYTE_ORDER = "<" if sys.byteorder == "little" else ">"
+VALID_BYTE_ORDERS = ("=", NATIVE_BYTE_ORDER)
+
 
 def get_array() -> st.SearchStrategy:
     """
@@ -76,10 +77,8 @@ def test_am___contains__(keys: Keys, others: Keys) -> None:
 def test_fam_array___contains__(keys: Keys) -> None:
     fam = FrozenAutoMap(keys)
     for key in keys:
-        try:
-            assert key in fam
-        except:
-            import ipdb; ipdb.set_trace()
+        assert key in fam
+
 
 @given(keys=hypothesis.infer, others=hypothesis.infer)
 def test_am___getitem__(keys: Keys, others: Keys) -> None:
