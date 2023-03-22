@@ -248,7 +248,7 @@ char_get_end_p(char* p, Py_ssize_t dt_size) {
 
 static inline Py_hash_t
 uint_to_hash(npy_uint64 v) {
-    return v >> 1;
+    return v >> 1; // divide by 2 so it always fits
 }
 
 
@@ -784,12 +784,16 @@ lookup_hash_uint(FAMObject *self, npy_uint64 key, Py_hash_t hash)
 
     int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
-    npy_double k = 0;
+    npy_uint64 k = 0;
     Py_hash_t h = 0;
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             h = table[table_pos].hash;
+            // DEBUG_MSG_OBJ("h: in table", PyLong_FromSsize_t(h));
+            // DEBUG_MSG_OBJ("hash: given", PyLong_FromSsize_t(hash));
+            // DEBUG_MSG_OBJ("keys_array_type", PyLong_FromSsize_t(self->keys_array_type));
+
             if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
@@ -813,6 +817,8 @@ lookup_hash_uint(FAMObject *self, npy_uint64 key, Py_hash_t hash)
                 default:
                     return -1;
             }
+            // DEBUG_MSG_OBJ("key", PyLong_FromSsize_t(key));
+            // DEBUG_MSG_OBJ("k", PyLong_FromSsize_t(k));
             result = key == k;
             if (result) { // Hit.
                 return table_pos;
@@ -992,7 +998,6 @@ lookup(FAMObject *self, PyObject *key) {
             npy_longlong temp;
             PyArray_ScalarAsCtype(key, &temp);
             v = (Py_ssize_t)temp;
-            DEBUG_MSG_OBJ("longlong", key);
         }
         else if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
@@ -1021,24 +1026,62 @@ lookup(FAMObject *self, PyObject *key) {
     }
     else if (self->keys_array_type >= KAT_UINT8
             && self->keys_array_type <= KAT_UINT64) {
-        Py_ssize_t v = 0;
-        if (PyFloat_Check(key)) {
-            double dv = PyFloat_AsDouble(key);
+        npy_uint64 v = 0;
+
+        if (PyArray_IsScalar(key, UByte)) {
+            npy_ubyte temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (npy_uint64)temp;
+        }
+        else if (PyArray_IsScalar(key, UShort)) {
+            // DEBUG_MSG_OBJ("got ushort", key);
+            npy_ushort temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (npy_uint64)temp;
+        }
+        else if (PyArray_IsScalar(key, UInt)) {
+            // DEBUG_MSG_OBJ("got uint", key);
+            npy_uint temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (npy_uint64)temp;
+        }
+        else if (PyArray_IsScalar(key, ULong)) {
+            // DEBUG_MSG_OBJ("got ulong", key);
+            npy_ulong temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (npy_uint64)temp;
+        }
+        else if (PyArray_IsScalar(key, ULongLong)) {
+            // DEBUG_MSG_OBJ("got ulonglong", key);
+            npy_ulonglong temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (npy_uint64)temp;
+        }
+        else if (PyFloat_Check(key)) {
+            double temp = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
                 return -1;
             }
-            v = (Py_ssize_t)dv; // truncate to integer
-            if (v != dv || v < 0) {
+            if (temp < 0) {
+                return -1;
+            }
+            v = (npy_uint64)temp; // truncate to integer
+            if (v != temp) {
                 return -1;
             }
         }
         else if (PyNumber_Check(key)) {
-            v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
+            Py_ssize_t temp;
+            temp = PyNumber_AsSsize_t(key, PyExc_OverflowError);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
                 return -1;
             }
+            if (temp < 0) {
+                return -1;
+            }
+            v = (npy_uint64)temp;
         }
         else {
             return -1;
@@ -1191,6 +1234,8 @@ insert_uint(
     if (hash == -1) {
         hash = uint_to_hash(key);
     }
+    // DEBUG_MSG_OBJ("inserting", PyLong_FromSsize_t(key));
+    // DEBUG_MSG_OBJ("hash", PyLong_FromSsize_t(hash));
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos;
     table_pos = lookup_hash_uint(self, key, hash);
@@ -1202,6 +1247,7 @@ insert_uint(
         PyErr_SetObject(NonUniqueError, PyFloat_FromDouble(key));
         return -1;
     }
+
     self->table[table_pos].keys_pos = keys_pos;
     self->table[table_pos].hash = hash;
     return 0;

@@ -300,6 +300,15 @@ def test_fam_array_uint_get_d():
         assert k in fam
 
 
+def test_fam_array_uint_get_e():
+    a1 = np.array((1,), dtype=np.uint16)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+    for k in a1:
+        assert k in fam
+
+
 # ------------------------------------------------------------------------------
 
 
