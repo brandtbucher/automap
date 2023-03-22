@@ -148,6 +148,7 @@ typedef struct {
 # define LOAD 0.9
 # define SCAN 16
 
+
 typedef enum {
     KAT_LIST = 0, // must be falsy
 
@@ -206,6 +207,7 @@ at_to_kat(int array_t) {
             return KAT_LIST;
     }
 }
+
 
 typedef struct {
     PyObject_VAR_HEAD
@@ -299,6 +301,7 @@ double_to_hash(double v)
     return (Py_hash_t)x;
 }
 
+
 // This is a "djb2" hash algorithm.
 static inline Py_hash_t
 UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
@@ -370,7 +373,7 @@ int_cache_remove(Py_ssize_t key_count)
 
 
 //------------------------------------------------------------------------------
-// FrozenAutoMapIterator objects
+// FrozenAutoMapIterator functions
 
 typedef struct {
     PyObject_VAR_HEAD
@@ -523,8 +526,7 @@ fami_new(FAMObject *fam, ViewKind kind, int reversed)
 }
 
 //------------------------------------------------------------------------------
-// FrozenAutoMapView objects
-
+// FrozenAutoMapView functions
 
 // A FAMVObject contains a reference to the FAM from which it was derived
 typedef struct {
@@ -686,6 +688,9 @@ famv_new(FAMObject *fam, int kind)
     return (PyObject *)famv;
 }
 
+//------------------------------------------------------------------------------
+// FrozenAutoMap functions
+
 // Given a key and a computed hash, return the table_pos if that hash and key are found. Return -1 on error.
 static Py_ssize_t
 lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
@@ -824,7 +829,6 @@ lookup_hash_uint(FAMObject *self, npy_uint64 key, Py_hash_t hash)
         table_pos = (5 * (table_pos - SCAN) + (mixin >>= 1) + 1) & mask;
     }
 }
-
 
 
 static Py_ssize_t
@@ -1184,6 +1188,7 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
     return 0;
 }
 
+
 static int
 insert_int(
         FAMObject *self,
@@ -1210,6 +1215,7 @@ insert_int(
     return 0;
 }
 
+
 static int
 insert_uint(
         FAMObject *self,
@@ -1227,7 +1233,7 @@ insert_uint(
         return -1;
     }
     if (self->table[table_pos].hash != -1) {
-        PyErr_SetObject(NonUniqueError, PyFloat_FromDouble(key));
+        PyErr_SetObject(NonUniqueError, PyLong_FromSsize_t(key));
         return -1;
     }
 
@@ -1320,7 +1326,6 @@ insert_string(
 }
 
 
-
 // Called in fam_new(), extend(), append(), with the size of observed keys. This table is updated only when append or extending. Only if there is an old table will keys be accessed Returns 0 on success, -1 on failure.
 static int
 grow_table(FAMObject *self, Py_ssize_t keys_size)
@@ -1386,35 +1391,23 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
     return 0;
 }
 
-// Create a copy. Returns NULL on error.
-static FAMObject *
-copy(PyTypeObject *cls, FAMObject *self)
+
+// Given a new, possibly un-initialized FAMObject, copy attrs from self to new. Note that if fam_init calls this, it will only do this routine. Return 0 on success, -1 on error.
+int
+copy_to_new(PyTypeObject *cls, FAMObject *self, FAMObject *new)
 {
-    if (!PyType_IsSubtype(cls, &AMType) && !PyObject_TypeCheck(self, &AMType)) {
-        Py_INCREF(self);
-        return self;
-    }
-    PyObject *keys = NULL;
     if (self->keys_array_type) {
-        keys = self->keys;
-        // assume we do not need to incref as fam_new does
+        new->keys = self->keys;
+        Py_INCREF(new->keys);
     }
     else {
-        keys = PySequence_List(self->keys);
-        if (!keys) {
-            return NULL;
+        new->keys = PySequence_List(self->keys);
+        if (!new->keys) {
+            return -1;
         }
     }
-
-    FAMObject *new = (FAMObject *)cls->tp_alloc(cls, 0);
-    if (!new) {
-        Py_DECREF(keys);
-        return NULL;
-    }
-    // NOTE: must update key_count_global as we are not calling fam_new()
-
     key_count_global += self->keys_size;
-    new->keys = keys;
+
     new->table_size = self->table_size;
     new->keys_array_type = self->keys_array_type;
     new->keys_size = self->keys_size;
@@ -1423,19 +1416,81 @@ copy(PyTypeObject *cls, FAMObject *self)
     if (new->keys_array_type == KAT_UNICODE) {
         PyArrayObject *a = (PyArrayObject *)new->keys;
         Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-        // keep as void, cast when used
         new->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
     }
 
     Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
     new->table = PyMem_New(TableElement, table_size_alloc);
     if (!new->table) {
-        Py_DECREF(new);
-        return NULL;
+        // Py_DECREF(new->keys); // assume this will get cleaned up
+        return -1;
     }
     memcpy(new->table, self->table, table_size_alloc * sizeof(TableElement));
-    return new;
+    return 0;
 }
+
+
+static PyObject *
+fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs);
+
+
+// Create a copy of self. Returns NULL on error.
+static FAMObject *
+copy(PyTypeObject *cls, FAMObject *self)
+{
+    if (!PyType_IsSubtype(cls, &AMType) && !PyObject_TypeCheck(self, &AMType)) {
+        Py_INCREF(self);
+        return self;
+    }
+    // FAMObject *new = (FAMObject *)cls->tp_alloc(cls, 0);
+
+    // fam_new to intialize struct attrs
+    FAMObject *new = (FAMObject*)fam_new(cls, NULL, NULL);
+    if (!new) {
+        return NULL;
+    }
+    if (copy_to_new(cls, self, new)) {
+        Py_DECREF(new); // assume this will decref any partially set attrs of new
+    }
+    return new;
+
+    // PyObject *keys = NULL;
+    // if (self->keys_array_type) {
+    //     keys = self->keys;
+    // }
+    // else {
+    //     keys = PySequence_List(self->keys);
+    //     if (!keys) {
+    //         return NULL;
+    //     }
+    // }
+
+    // // NOTE: must update key_count_global as we are not calling fam_new()
+
+    // key_count_global += self->keys_size;
+    // new->keys = keys;
+    // new->table_size = self->table_size;
+    // new->keys_array_type = self->keys_array_type;
+    // new->keys_size = self->keys_size;
+
+    // new->key_buffer = NULL;
+    // if (new->keys_array_type == KAT_UNICODE) {
+    //     PyArrayObject *a = (PyArrayObject *)new->keys;
+    //     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+    //     new->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
+    // }
+
+    // Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
+    // new->table = PyMem_New(TableElement, table_size_alloc);
+    // if (!new->table) {
+    //     Py_DECREF(new);
+    //     return NULL;
+    // }
+    // memcpy(new->table, self->table, table_size_alloc * sizeof(TableElement));
+    // return new;
+}
+
+
 
 // Returns -1 on error, 0 on success.
 static int
@@ -1473,6 +1528,7 @@ extend(FAMObject *self, PyObject *keys)
     Py_DECREF(keys);
     return 0;
 }
+
 
 // Returns -1 on error, 0 on success.
 static int
@@ -1586,13 +1642,18 @@ static PySequenceMethods fam_as_sequence = {
 static void
 fam_dealloc(FAMObject *self)
 {
-    PyMem_Free(self->table);
+    if (self->table) {
+        PyMem_Free(self->table);
+    }
     if (self->key_buffer) {
         PyMem_Free(self->key_buffer);
     }
+    if (self->keys) {
+        Py_DECREF(self->keys);
+    }
+
     key_count_global -= self->keys_size;
 
-    Py_DECREF(self->keys);
     Py_TYPE(self)->tp_free((PyObject *)self);
     int_cache_remove(key_count_global);
 }
@@ -1604,9 +1665,9 @@ fam_hash(FAMObject *self)
 {
     Py_hash_t hash = 0;
     for (Py_ssize_t i = 0; i < self->table_size; i++) {
-        // REVIEW: should the -1 hash check be here?
         hash = hash * 3 + self->table[i].hash;
     }
+    // just in case we got a hash of -1, fix it
     if (hash == -1) {
         return 0;
     }
@@ -1693,7 +1754,7 @@ if (contiguous) {                                       \
     npy_type* b = (npy_type*)PyArray_DATA(a);           \
     npy_type* b_end = b + keys_size;                    \
     while (b < b_end) {                                 \
-        if (insert_func(self, *b, i, -1)) {             \
+        if (insert_func(fam, *b, i, -1)) {             \
             goto error;                                 \
         }                                               \
         b++;                                            \
@@ -1702,7 +1763,7 @@ if (contiguous) {                                       \
 }                                                       \
 else {                                                  \
     for (; i < keys_size; i++) {                        \
-        if (insert_func(self,                           \
+        if (insert_func(fam,                           \
                 *(npy_type*)PyArray_GETPTR1(a, i),      \
                 i,                                      \
                 -1)) {                                  \
@@ -1712,20 +1773,39 @@ else {                                                  \
 }                                                       \
 
 
-
 static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
+    // DEBUG_MSG_OBJ("calling fam_new", args);
+    FAMObject *self = (FAMObject *)cls->tp_alloc(cls, 0);
+    if (!self) {
+        return NULL;
+    }
+    self->table = NULL;
+    self->keys = NULL;
+    self->key_buffer = NULL;
+    self->keys_size = 0;
+
+    return (PyObject*)self;
+}
+
+
+// Initialize an allocated FAMObject. Returns 0 on success, -1 on error.
+int
+fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyTypeObject* cls = Py_TYPE(self); // borrowed ref
     const char *name = cls->tp_name;
+    FAMObject* fam = (FAMObject*)self;
 
     if (kwargs) {
         PyErr_Format(PyExc_TypeError, "%s takes no keyword arguments", name);
-        return NULL;
+        return -1;
     }
 
     PyObject *keys = NULL;
     if (!PyArg_UnpackTuple(args, name, 0, 1, &keys)) {
-        return NULL;
+        return -1;
     }
 
     int keys_array_type = KAT_LIST;
@@ -1734,14 +1814,16 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         keys = PyList_New(0);
     }
     else if (PyObject_TypeCheck(keys, &FAMType)) {
-        return (PyObject *)copy(cls, (FAMObject *)keys);
+        // return (PyObject *)copy(cls, (FAMObject *)keys);
+        // Use `keys` as old, `self` as new, and fill from old to new. This returns the same error codes as this function
+        return copy_to_new(cls, (FAMObject*)keys, fam);
     }
     else if (PyArray_Check(keys)) {
         PyArrayObject *a = (PyArrayObject *)keys;
 
         if (PyArray_NDIM(a) != 1) {
             PyErr_SetString(PyExc_TypeError, "Arrays must be 1-dimensional");
-            return NULL;
+            return -1;
         }
         int array_t = PyArray_TYPE(a);
         int is_i = PyTypeNum_ISSIGNED(array_t);
@@ -1750,13 +1832,11 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
         int is_U = array_t == NPY_UNICODE;
         int is_S = array_t == NPY_STRING;
 
-        // int is_f = array_t == NPY_FLOAT64;
-
         if (cls != &AMType
                 && (is_i || is_u || is_f || is_U || is_S)) {
             if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {
-                PyErr_Format(PyExc_TypeError, "integer, float, & unicode Arrays must be immutable when given to a %s", name);
-                return NULL;
+                PyErr_Format(PyExc_TypeError, "Arrays must be immutable when given to a %s", name);
+                return -1;
             }
             keys_array_type = at_to_kat(array_t);
             assert(keys_array_type); // must be truthy
@@ -1776,33 +1856,27 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
     }
 
     if (!keys) {
-        return NULL;
+        return -1;
     }
 
-    FAMObject *self = (FAMObject *)cls->tp_alloc(cls, 0);
-    if (!self) {
-        Py_DECREF(keys);
-        return NULL;
-    }
-
-    self->keys = keys;
-    self->keys_array_type = keys_array_type;
+    fam->keys = keys;
+    fam->keys_array_type = keys_array_type;
 
     Py_ssize_t keys_size = keys_array_type
         ? PyArray_SIZE((PyArrayObject *)keys)
         : PyList_GET_SIZE(keys);
-    self->keys_size = keys_size;
-    self->key_buffer = NULL;
+    fam->keys_size = keys_size;
+    fam->key_buffer = NULL;
     key_count_global += keys_size;
 
     // NOTE: this only iterates and insert keys when there growing from an old to a new table; on itialization, this does not use keys
-    if (grow_table(self, keys_size)) {
-        Py_DECREF(self);
-        return NULL;
+    if (grow_table(fam, keys_size)) {
+        // Py_DECREF(self);
+        return -1;
     }
     Py_ssize_t i = 0;
     if (keys_array_type) {
-        PyArrayObject *a = (PyArrayObject *)self->keys;
+        PyArrayObject *a = (PyArrayObject *)fam->keys;
         int contiguous = PyArray_IS_C_CONTIGUOUS(a);
 
         switch (keys_array_type) {
@@ -1818,7 +1892,6 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             case KAT_INT8:
                 INSERT_SCALARS(npy_int8, insert_int);
                 break;
-
             case KAT_UINT64:
                 INSERT_SCALARS(npy_uint64, insert_uint);
                 break;
@@ -1831,7 +1904,6 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             case KAT_UINT8:
                 INSERT_SCALARS(npy_uint8, insert_uint);
                 break;
-
             case KAT_FLOAT64:
                 INSERT_SCALARS(npy_double, insert_float);
                 break;
@@ -1845,7 +1917,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
             case KAT_UNICODE: {
                 // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
                 Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-                self->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
+                fam->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
 
                 Py_UCS4* p = NULL;
                 if (contiguous) {
@@ -1853,7 +1925,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                     Py_UCS4 *b_end = b + keys_size * dt_size;
                     while (b < b_end) {
                         p = ucs4_get_end_p(b, dt_size);
-                        if (insert_unicode(self, b, p-b, i, -1)) {
+                        if (insert_unicode(fam, b, p-b, i, -1)) {
                             goto error;
                         }
                         b += dt_size;
@@ -1864,7 +1936,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                     for (; i < keys_size; i++) {
                         Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
                         p = ucs4_get_end_p(v, dt_size);
-                        if (insert_unicode(self, v, p-v, i, -1)) {
+                        if (insert_unicode(fam, v, p-v, i, -1)) {
                             goto error;
                         }
                     }
@@ -1882,7 +1954,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                     char *b_end = b + keys_size * dt_size;
                     while (b < b_end) {
                         p = char_get_end_p(b, dt_size);
-                        if (insert_string(self, b, p-b, i, -1)) {
+                        if (insert_string(fam, b, p-b, i, -1)) {
                             goto error;
                         }
                         b += dt_size;
@@ -1893,28 +1965,26 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
                     for (; i < keys_size; i++) {
                         char* v = (char*)PyArray_GETPTR1(a, i);
                         p = char_get_end_p(v, dt_size);
-                        if (insert_string(self, v, p-v, i, -1)) {
+                        if (insert_string(fam, v, p-v, i, -1)) {
                             goto error;
                         }
                     }
                 }
                 break;
             }
-
         }
-
     }
     else {
         for (; i < keys_size; i++) {
-            if (insert(self, PyList_GET_ITEM(self->keys, i), i, -1)) {
+            if (insert(fam, PyList_GET_ITEM(fam->keys, i), i, -1)) {
                 goto error;
             }
         }
     }
-    return (PyObject *)self;
+    return 0;
 error:
-    Py_DECREF(self);
-    return NULL;
+    // Py_DECREF(self);
+    return -1;
 }
 
 
@@ -1935,10 +2005,38 @@ fam_richcompare(FAMObject *self, PyObject *other, int op)
 }
 
 
+// static PyObject*
+// fam___getstate__(FAMObject *self)
+// {
+//     // PyObject* state = Py_BuildValue("{sOsb}", "keys", self->keys, "own_array", 1);
+//     PyObject* own_array = PyBool_FromLong(1);
+//     PyObject* state = PyTuple_Pack(
+//                     2,
+//                     self->keys,
+//                     own_array);
+//     DEBUG_MSG_OBJ("calling getstate", state);
+//     return state;
+// }
+
+
+// static PyObject*
+// fam___setstate__(FAMObject *self, PyObject *state)
+// {
+//     // if (!PyDict_Check(state)) {
+//     //     PyErr_SetString(PyExc_ValueError, "Pickled state not dictionary");
+//     //     return NULL;
+//     // }
+//     DEBUG_MSG_OBJ("calling setstate", state);
+//     Py_RETURN_NONE;
+// }
+
+
 static PyMethodDef fam_methods[] = {
     {"__getnewargs__", (PyCFunction) fam___getnewargs__, METH_NOARGS, NULL},
     {"__reversed__", (PyCFunction) fam___reversed__, METH_NOARGS, NULL},
     {"__sizeof__", (PyCFunction) fam___sizeof__, METH_NOARGS, NULL},
+    // {"__getstate__", (PyCFunction) fam___getstate__, METH_NOARGS, NULL},
+    // {"__setstate__", (PyCFunction) fam___setstate__, METH_O, NULL},
     {"get", (PyCFunction) fam_get, METH_VARARGS, NULL},
     {"items", (PyCFunction) fam_items, METH_NOARGS, NULL},
     {"keys", (PyCFunction) fam_keys, METH_NOARGS, NULL},
@@ -1960,6 +2058,7 @@ static PyTypeObject FAMType = {
     .tp_methods = fam_methods,
     .tp_name = "automap.FrozenAutoMap",
     .tp_new = fam_new,
+    .tp_init = fam_init,
     .tp_repr = (reprfunc) fam_repr,
     .tp_richcompare = (richcmpfunc) fam_richcompare,
 };

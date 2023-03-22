@@ -1,4 +1,5 @@
 import typing
+import pickle
 import pytest
 import numpy as np
 
@@ -450,3 +451,18 @@ def test_am_array_constructor_c():
     am.update((60, 80))
     am.add(90)
     assert list(am.keys()) == [10, 20, 30, 40, 60, 80, 90]
+
+
+# ------------------------------------------------------------------------------
+
+
+def test_fam_array_pickle_a():
+    a1 = np.array(("a", "b", "c", "d"))
+    a1.flags.writeable = False
+    fam1 = FrozenAutoMap(a1)
+
+    fam2 = pickle.loads(pickle.dumps(fam1))
+
+    import ipdb
+
+    ipdb.set_trace()
