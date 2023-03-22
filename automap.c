@@ -1453,41 +1453,6 @@ copy(PyTypeObject *cls, FAMObject *self)
         Py_DECREF(new); // assume this will decref any partially set attrs of new
     }
     return new;
-
-    // PyObject *keys = NULL;
-    // if (self->keys_array_type) {
-    //     keys = self->keys;
-    // }
-    // else {
-    //     keys = PySequence_List(self->keys);
-    //     if (!keys) {
-    //         return NULL;
-    //     }
-    // }
-
-    // // NOTE: must update key_count_global as we are not calling fam_new()
-
-    // key_count_global += self->keys_size;
-    // new->keys = keys;
-    // new->table_size = self->table_size;
-    // new->keys_array_type = self->keys_array_type;
-    // new->keys_size = self->keys_size;
-
-    // new->key_buffer = NULL;
-    // if (new->keys_array_type == KAT_UNICODE) {
-    //     PyArrayObject *a = (PyArrayObject *)new->keys;
-    //     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-    //     new->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
-    // }
-
-    // Py_ssize_t table_size_alloc = new->table_size + SCAN - 1;
-    // new->table = PyMem_New(TableElement, table_size_alloc);
-    // if (!new->table) {
-    //     Py_DECREF(new);
-    //     return NULL;
-    // }
-    // memcpy(new->table, self->table, table_size_alloc * sizeof(TableElement));
-    // return new;
 }
 
 
@@ -1794,6 +1759,8 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 int
 fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
 {
+    // DEBUG_MSG_OBJ("calling fam_int", args);
+
     PyTypeObject* cls = Py_TYPE(self); // borrowed ref
     const char *name = cls->tp_name;
     FAMObject* fam = (FAMObject*)self;
@@ -2005,38 +1972,40 @@ fam_richcompare(FAMObject *self, PyObject *other, int op)
 }
 
 
-// static PyObject*
-// fam___getstate__(FAMObject *self)
-// {
-//     // PyObject* state = Py_BuildValue("{sOsb}", "keys", self->keys, "own_array", 1);
-//     PyObject* own_array = PyBool_FromLong(1);
-//     PyObject* state = PyTuple_Pack(
-//                     2,
-//                     self->keys,
-//                     own_array);
-//     DEBUG_MSG_OBJ("calling getstate", state);
-//     return state;
-// }
+static PyObject*
+fam___getstate__(FAMObject *self)
+{
+    PyObject* state = PyTuple_Pack(
+                    1,
+                    self->keys
+                    );
+    //REVIEW: how do we decref this newly created tuple?
+    // DEBUG_MSG_OBJ("calling getstate", state);
+    return state;
+}
 
-
-// static PyObject*
-// fam___setstate__(FAMObject *self, PyObject *state)
-// {
-//     // if (!PyDict_Check(state)) {
-//     //     PyErr_SetString(PyExc_ValueError, "Pickled state not dictionary");
-//     //     return NULL;
-//     // }
-//     DEBUG_MSG_OBJ("calling setstate", state);
-//     Py_RETURN_NONE;
-// }
+// State returned here is only the keys object.
+static PyObject*
+fam___setstate__(FAMObject *self, PyObject *state)
+{
+    PyObject *keys = PyTuple_GetItem(state, 0);
+    if (PyArray_Check(keys)) {
+        // if we get an array coming back from a pickle, we must make it immutable
+        PyArray_CLEARFLAGS((PyArrayObject*)keys, NPY_ARRAY_WRITEABLE);
+    }
+    // DEBUG_MSG_OBJ("calling setstate", state);
+    fam_init((PyObject*)self, state, NULL);
+    // REVIEW: should we decref state?
+    Py_RETURN_NONE;
+}
 
 
 static PyMethodDef fam_methods[] = {
     {"__getnewargs__", (PyCFunction) fam___getnewargs__, METH_NOARGS, NULL},
     {"__reversed__", (PyCFunction) fam___reversed__, METH_NOARGS, NULL},
     {"__sizeof__", (PyCFunction) fam___sizeof__, METH_NOARGS, NULL},
-    // {"__getstate__", (PyCFunction) fam___getstate__, METH_NOARGS, NULL},
-    // {"__setstate__", (PyCFunction) fam___setstate__, METH_O, NULL},
+    {"__getstate__", (PyCFunction) fam___getstate__, METH_NOARGS, NULL},
+    {"__setstate__", (PyCFunction) fam___setstate__, METH_O, NULL},
     {"get", (PyCFunction) fam_get, METH_VARARGS, NULL},
     {"items", (PyCFunction) fam_items, METH_NOARGS, NULL},
     {"keys", (PyCFunction) fam_keys, METH_NOARGS, NULL},

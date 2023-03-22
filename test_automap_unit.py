@@ -463,6 +463,6 @@ def test_fam_array_pickle_a():
 
     fam2 = pickle.loads(pickle.dumps(fam1))
 
-    import ipdb
+    # import ipdb
 
-    ipdb.set_trace()
+    # ipdb.set_trace()
