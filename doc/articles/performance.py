@@ -399,7 +399,7 @@ CLS_FF = (
 FF_ORDER = [f.NAME for f in sorted(CLS_FF, key=lambda ff: ff.SORT)]
 
 # -------------------------------------------------------------------------------
-NUMBER = 1
+NUMBER = 50
 
 from itertools import product
 
