@@ -248,9 +248,16 @@ char_get_end_p(char* p, Py_ssize_t dt_size) {
 
 static inline Py_hash_t
 uint_to_hash(npy_uint64 v) {
-    return v >> 1; // divide by 2 so it always fits
+    return v >> 1; // divide by 2 so it always fits in signed space
 }
 
+static inline Py_hash_t
+int_to_hash(npy_int64 v) {
+    if v == -1 { // error code in Python hashing
+        return -2;
+    }
+    return v;
+}
 
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
 #define HASH_BITS 61
