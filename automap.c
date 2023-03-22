@@ -120,12 +120,12 @@ really gives us our awesome performance.
 # include "numpy/arrayobject.h"
 # include "numpy/arrayscalars.h"
 
-# define DEBUG_MSG_OBJ(msg, obj)     \
+# define DEBUG_MSG_OBJ(msg, obj)      \
     fprintf(stderr, "--- %s: %i: %s: ", __FILE__, __LINE__, __FUNCTION__); \
-    fprintf(stderr, #msg " ");      \
-    PyObject_Print(obj, stderr, 0); \
-    fprintf(stderr, "\n"); \
-    fflush(stderr);        \
+    fprintf(stderr, #msg " ");        \
+    PyObject_Print(obj, stderr, 0);   \
+    fprintf(stderr, "\n");            \
+    fflush(stderr);                   \
 
 //------------------------------------------------------------------------------
 // Common
@@ -253,7 +253,7 @@ uint_to_hash(npy_uint64 v) {
 
 static inline Py_hash_t
 int_to_hash(npy_int64 v) {
-    if v == -1 { // error code in Python hashing
+    if (v == -1) { // error code in Python hashing
         return -2;
     }
     return v;
@@ -533,7 +533,7 @@ typedef struct {
     ViewKind kind;
 } FAMVObject;
 
-# define FAMV_SET_OP(name, op)                                 \
+# define FAMV_SET_OP(name, op)                            \
 static PyObject *                                         \
 name(PyObject *left, PyObject *right)                     \
 {                                                         \
@@ -731,14 +731,13 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 
 // For these integers, the key is used as the hash.
 static Py_ssize_t
-lookup_hash_int(FAMObject *self, npy_int64 key)
+lookup_hash_int(FAMObject *self, npy_int64 key, Py_hash_t hash)
 {
     TableElement *table = self->table;
     Py_ssize_t mask = self->table_size - 1;
-    Py_hash_t mixin = Py_ABS(key);
-    Py_ssize_t table_pos = key & mask; // taking the modulo
+    Py_hash_t mixin = Py_ABS(hash);
+    Py_ssize_t table_pos = hash & mask; // taking the modulo
 
-    int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
     npy_int64 k = 0;
     Py_hash_t h = 0;
@@ -749,7 +748,7 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
             if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
-            if (h != key) { // Collision.
+            if (h != hash) { // Collision.
                 table_pos++;
                 continue;
             }
@@ -769,9 +768,7 @@ lookup_hash_int(FAMObject *self, npy_int64 key)
                 default:
                     return -1;
             }
-            result = key == k;
-
-            if (result) { // Hit.
+            if (key == k) { // Hit.
                 return table_pos;
             }
             table_pos++;
@@ -789,7 +786,6 @@ lookup_hash_uint(FAMObject *self, npy_uint64 key, Py_hash_t hash)
     Py_hash_t mixin = Py_ABS(hash);
     Py_ssize_t table_pos = hash & mask;
 
-    int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
     npy_uint64 k = 0;
     Py_hash_t h = 0;
@@ -797,10 +793,6 @@ lookup_hash_uint(FAMObject *self, npy_uint64 key, Py_hash_t hash)
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             h = table[table_pos].hash;
-            // DEBUG_MSG_OBJ("h: in table", PyLong_FromSsize_t(h));
-            // DEBUG_MSG_OBJ("hash: given", PyLong_FromSsize_t(hash));
-            // DEBUG_MSG_OBJ("keys_array_type", PyLong_FromSsize_t(self->keys_array_type));
-
             if (h == -1) { // Miss. Found a position that can be used for insertion.
                 return table_pos;
             }
@@ -824,10 +816,7 @@ lookup_hash_uint(FAMObject *self, npy_uint64 key, Py_hash_t hash)
                 default:
                     return -1;
             }
-            // DEBUG_MSG_OBJ("key", PyLong_FromSsize_t(key));
-            // DEBUG_MSG_OBJ("k", PyLong_FromSsize_t(k));
-            result = key == k;
-            if (result) { // Hit.
+            if (key == k) { // Hit.
                 return table_pos;
             }
             table_pos++;
@@ -846,7 +835,6 @@ lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
     Py_hash_t mixin = Py_ABS(hash);
     Py_ssize_t table_pos = hash & mask;
 
-    int result = -1;
     PyArrayObject *a = (PyArrayObject *)self->keys;
     npy_double k = 0;
     Py_hash_t h = 0;
@@ -874,8 +862,7 @@ lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
                 default:
                     return -1;
             }
-            result = key == k;
-            if (result) { // Hit.
+            if (key == k) { // Hit.
                 return table_pos;
             }
             table_pos++;
@@ -902,7 +889,6 @@ lookup_hash_unicode(
     // REVIEW: is this a new descr reference?
     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
 
-    int result = -1;
     Py_hash_t h = 0;
     Py_UCS4* p_start = NULL;
 
@@ -916,11 +902,9 @@ lookup_hash_unicode(
                 table_pos++;
                 continue;
             }
-            result = 1;
             p_start = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
-            // returns 0 on match
-            result = memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size));
-            if (!result) { // Hit.
+            // memcmp returns 0 on match
+            if (!memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size))) { // Hit.
                 return table_pos;
             }
             table_pos++;
@@ -945,7 +929,6 @@ lookup_hash_string(
     PyArrayObject *a = (PyArrayObject *)self->keys;
     Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(char);
 
-    int result = -1;
     Py_hash_t h = 0;
     char* p_start = NULL;
 
@@ -959,11 +942,9 @@ lookup_hash_string(
                 table_pos++;
                 continue;
             }
-            result = 1;
             p_start = (char*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
-            // returns 0 on match
-            result = memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size));
-            if (!result) { // Hit.
+            // memcmp returns 0 on match
+            if (!memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size))) { // Hit.
                 return table_pos;
             }
             table_pos++;
@@ -1028,8 +1009,8 @@ lookup(FAMObject *self, PyObject *key) {
         else {
             return -1;
         }
-
-        table_pos = lookup_hash_int(self, v);
+        Py_hash_t hash = int_to_hash(v);
+        table_pos = lookup_hash_int(self, v, hash);
     }
     else if (self->keys_array_type >= KAT_UINT8
             && self->keys_array_type <= KAT_UINT64) {
@@ -1041,25 +1022,21 @@ lookup(FAMObject *self, PyObject *key) {
             v = (npy_uint64)temp;
         }
         else if (PyArray_IsScalar(key, UShort)) {
-            // DEBUG_MSG_OBJ("got ushort", key);
             npy_ushort temp;
             PyArray_ScalarAsCtype(key, &temp);
             v = (npy_uint64)temp;
         }
         else if (PyArray_IsScalar(key, UInt)) {
-            // DEBUG_MSG_OBJ("got uint", key);
             npy_uint temp;
             PyArray_ScalarAsCtype(key, &temp);
             v = (npy_uint64)temp;
         }
         else if (PyArray_IsScalar(key, ULong)) {
-            // DEBUG_MSG_OBJ("got ulong", key);
             npy_ulong temp;
             PyArray_ScalarAsCtype(key, &temp);
             v = (npy_uint64)temp;
         }
         else if (PyArray_IsScalar(key, ULongLong)) {
-            // DEBUG_MSG_OBJ("got ulonglong", key);
             npy_ulonglong temp;
             PyArray_ScalarAsCtype(key, &temp);
             v = (npy_uint64)temp;
@@ -1207,7 +1184,6 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
     return 0;
 }
 
-// NOTE: `hash` argument is not used, bit is hear to provide the same interface.
 static int
 insert_int(
         FAMObject *self,
@@ -1215,9 +1191,12 @@ insert_int(
         Py_ssize_t keys_pos,
         Py_hash_t hash)
 {
+    if (hash == -1) {
+        hash = int_to_hash(key);
+    }
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos;
-    table_pos = lookup_hash_int(self, key);
+    table_pos = lookup_hash_int(self, key, hash);
 
     if (table_pos < 0) {
         return -1;
@@ -1227,7 +1206,7 @@ insert_int(
         return -1;
     }
     self->table[table_pos].keys_pos = keys_pos;
-    self->table[table_pos].hash = key; // key is the hash
+    self->table[table_pos].hash = hash; // key is the hash
     return 0;
 }
 
@@ -1241,9 +1220,6 @@ insert_uint(
     if (hash == -1) {
         hash = uint_to_hash(key);
     }
-    // DEBUG_MSG_OBJ("inserting", PyLong_FromSsize_t(key));
-    // DEBUG_MSG_OBJ("hash", PyLong_FromSsize_t(hash));
-    // table position is not dependent on keys_pos
     Py_ssize_t table_pos;
     table_pos = lookup_hash_uint(self, key, hash);
 

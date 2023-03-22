@@ -59,6 +59,14 @@ def test_fam_constructor_array_int_c():
         assert k in fam
 
 
+def test_fam_constructor_array_int_d():
+    a1 = np.array((-2, -1, 1, 2), dtype=np.int8)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    for k in a1:
+        assert k in fam
+
+
 # def test_fam_constructor_array_a3():
 #     a1 = np.array(("a", "bb", "ccc"))
 #     with pytest.raises(TypeError):

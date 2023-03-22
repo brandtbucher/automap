@@ -31,6 +31,8 @@ def get_array() -> st.SearchStrategy:
     def proc(a: np.ndarray, contiguous: bool):
         if a.dtype.kind in ("f", "c"):
             a = a[~np.isnan(a)]
+        if a.dtype.kind in ("m",):
+            a = a[~np.isnat(a)]
 
         if a.dtype.byteorder not in VALID_BYTE_ORDERS:
             a = a.astype(a.dtype.newbyteorder(NATIVE_BYTE_ORDER))
@@ -174,7 +176,7 @@ def test_am_non_unique_exception(keys: Keys):
 
 
 @given(keys=get_array())
-def test_fam_non_unique_exception(keys: Keys):
+def test_fam_array_non_unique_exception(keys: Keys):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
 
