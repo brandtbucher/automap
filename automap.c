@@ -876,7 +876,7 @@ lookup_hash_float(FAMObject *self, npy_double key, Py_hash_t hash)
 }
 
 
-// Copmare a passed Py_UCS4 array to stored keys. This does not use any dynamic memory. Returns -1 on error.
+// Compare a passed Py_UCS4 array to stored keys. This does not use any dynamic memory. Returns -1 on error.
 static Py_ssize_t
 lookup_hash_unicode(
         FAMObject *self,
@@ -1838,7 +1838,7 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
 
     // NOTE: this only iterates and insert keys when there growing from an old to a new table; on itialization, this does not use keys
     if (grow_table(fam, keys_size)) {
-        // Py_DECREF(self);
+        // assume `keys` will be cleaned decrefed by the caller
         return -1;
     }
     Py_ssize_t i = 0;
@@ -1975,16 +1975,11 @@ fam_richcompare(FAMObject *self, PyObject *other, int op)
 static PyObject*
 fam___getstate__(FAMObject *self)
 {
-    PyObject* state = PyTuple_Pack(
-                    1,
-                    self->keys
-                    );
-    //REVIEW: how do we decref this newly created tuple?
-    // DEBUG_MSG_OBJ("calling getstate", state);
+    PyObject* state = PyTuple_Pack(1, self->keys);
     return state;
 }
 
-// State returned here is only the keys object.
+// State returned here is a tuple of keys, suitable for usage as an `args` argument.
 static PyObject*
 fam___setstate__(FAMObject *self, PyObject *state)
 {
@@ -1993,9 +1988,7 @@ fam___setstate__(FAMObject *self, PyObject *state)
         // if we get an array coming back from a pickle, we must make it immutable
         PyArray_CLEARFLAGS((PyArrayObject*)keys, NPY_ARRAY_WRITEABLE);
     }
-    // DEBUG_MSG_OBJ("calling setstate", state);
     fam_init((PyObject*)self, state, NULL);
-    // REVIEW: should we decref state?
     Py_RETURN_NONE;
 }
 
