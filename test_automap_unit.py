@@ -269,12 +269,12 @@ def test_fam_array_int_get_e1():
 
 def test_fam_array_int_get_f():
     ctype = np.int64
+
     a1 = np.array([np.iinfo(ctype).min, np.iinfo(ctype).max], dtype=ctype)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
 
-    assert list(fam.values()) == []
-
+    assert list(fam.keys()) == [np.iinfo(ctype).min, np.iinfo(ctype).max]
     assert fam.get("f") is None
     assert fam.get(a1[0]) == 0
     assert fam.get(a1[1]) == 1
