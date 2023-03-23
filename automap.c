@@ -1712,7 +1712,7 @@ fam_values(FAMObject *self)
     return famv_new(self, VALUES);
 }
 
-// This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_new` to get `self`, `contguous`, `a`, `keys_size`, and `i`.
+// This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`.
 # define INSERT_SCALARS(npy_type, insert_func)          \
 if (contiguous) {                                       \
     npy_type* b = (npy_type*)PyArray_DATA(a);           \
@@ -1736,6 +1736,30 @@ else {                                                  \
     }                                                   \
 }                                                       \
 
+
+# define INSERT_FLEXIBLE(char_type, insert_func, get_end_func) \
+char_type* p = NULL;\
+if (contiguous) {\
+    char_type *b = (char_type*)PyArray_DATA(a);\
+    char_type *b_end = b + keys_size * dt_size;\
+    while (b < b_end) {\
+        p = get_end_func(b, dt_size);\
+        if (insert_func(fam, b, p-b, i, -1)) {\
+            goto error;\
+        }\
+        b += dt_size;\
+        i++;\
+    }\
+}\
+else {\
+    for (; i < keys_size; i++) {\
+        char_type* v = (char_type*)PyArray_GETPTR1(a, i);\
+        p = get_end_func(v, dt_size);\
+        if (insert_func(fam, v, p-v, i, -1)) {\
+            goto error;\
+        }\
+    }\
+}\
 
 static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
@@ -1779,8 +1803,7 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
         keys = PyList_New(0);
     }
     else if (PyObject_TypeCheck(keys, &FAMType)) {
-        // return (PyObject *)copy(cls, (FAMObject *)keys);
-        // Use `keys` as old, `self` as new, and fill from old to new. This returns the same error codes as this function
+        // Use `keys` as old, `self` as new, and fill from old to new. This returns the same error codes as this function.
         return copy_to_new(cls, (FAMObject*)keys, fam);
     }
     else if (PyArray_Check(keys)) {
@@ -1791,14 +1814,14 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
             return -1;
         }
         int array_t = PyArray_TYPE(a);
-        int is_i = PyTypeNum_ISSIGNED(array_t);
-        int is_u = PyTypeNum_ISUNSIGNED(array_t);
-        int is_f = PyTypeNum_ISFLOAT(array_t);
-        int is_U = array_t == NPY_UNICODE;
-        int is_S = array_t == NPY_STRING;
 
-        if (cls != &AMType
-                && (is_i || is_u || is_f || is_U || is_S)) {
+        if (cls != &AMType &&
+                (PyTypeNum_ISSIGNED(array_t)
+                || PyTypeNum_ISUNSIGNED(array_t)
+                || PyTypeNum_ISFLOAT(array_t)
+                || array_t == NPY_UNICODE
+                || array_t == NPY_STRING)
+            ){
             if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {
                 PyErr_Format(PyExc_TypeError, "Arrays must be immutable when given to a %s", name);
                 return -1;
@@ -1807,12 +1830,12 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
             assert(keys_array_type); // must be truthy
             Py_INCREF(keys);
         }
-        else { // if an AutoMap, or if an array type that we do not custom-hash, then we create a list
+        else { // if an AutoMap or an array that we do not custom-hash, we create a list
             if (array_t == NPY_DATETIME || array_t == NPY_TIMEDELTA){
                 keys = PySequence_List(keys); // force scalars
             }
-            else { // calling tolist() converts to objs
-                keys = PyArray_ToList(a);
+            else {
+                keys = PyArray_ToList(a); // converts to objs
             }
         }
     }
@@ -1834,16 +1857,15 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
     fam->key_buffer = NULL;
     key_count_global += keys_size;
 
-    // NOTE: this only iterates and insert keys when there growing from an old to a new table; on itialization, this does not use keys
+    // NOTE: on itialization, grow_table() does not use keys
     if (grow_table(fam, keys_size)) {
-        // assume `keys` will be cleaned decrefed by the caller
+        // assume `fam->keys` will be decrefed by the caller
         return -1;
     }
     Py_ssize_t i = 0;
     if (keys_array_type) {
         PyArrayObject *a = (PyArrayObject *)fam->keys;
         int contiguous = PyArray_IS_C_CONTIGUOUS(a);
-
         switch (keys_array_type) {
             case KAT_INT64:
                 INSERT_SCALARS(npy_int64, insert_int);
@@ -1878,63 +1900,17 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
             case KAT_FLOAT16:
                 INSERT_SCALARS(npy_half, insert_float);
                 break;
-
             case KAT_UNICODE: {
                 // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
                 Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
                 fam->key_buffer = (Py_UCS4*)PyMem_Malloc((dt_size+1) * sizeof(Py_UCS4));
-
-                Py_UCS4* p = NULL;
-                if (contiguous) {
-                    Py_UCS4 *b = (Py_UCS4*)PyArray_DATA(a);
-                    Py_UCS4 *b_end = b + keys_size * dt_size;
-                    while (b < b_end) {
-                        p = ucs4_get_end_p(b, dt_size);
-                        if (insert_unicode(fam, b, p-b, i, -1)) {
-                            goto error;
-                        }
-                        b += dt_size;
-                        i++;
-                    }
-                }
-                else {
-                    for (; i < keys_size; i++) {
-                        Py_UCS4* v = (Py_UCS4*)PyArray_GETPTR1(a, i);
-                        p = ucs4_get_end_p(v, dt_size);
-                        if (insert_unicode(fam, v, p-v, i, -1)) {
-                            goto error;
-                        }
-                    }
-                }
+                INSERT_FLEXIBLE(Py_UCS4, insert_unicode, ucs4_get_end_p);
                 break;
             }
-
             case KAT_STRING: {
                 // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
-                Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(char);
-
-                char* p = NULL;
-                if (contiguous) {
-                    char *b = (char*)PyArray_DATA(a);
-                    char *b_end = b + keys_size * dt_size;
-                    while (b < b_end) {
-                        p = char_get_end_p(b, dt_size);
-                        if (insert_string(fam, b, p-b, i, -1)) {
-                            goto error;
-                        }
-                        b += dt_size;
-                        i++;
-                    }
-                }
-                else {
-                    for (; i < keys_size; i++) {
-                        char* v = (char*)PyArray_GETPTR1(a, i);
-                        p = char_get_end_p(v, dt_size);
-                        if (insert_string(fam, v, p-v, i, -1)) {
-                            goto error;
-                        }
-                    }
-                }
+                Py_ssize_t dt_size = PyArray_DESCR(a)->elsize;
+                INSERT_FLEXIBLE(char, insert_string, char_get_end_p);
                 break;
             }
         }
@@ -1976,13 +1952,18 @@ fam___getstate__(FAMObject *self)
     return state;
 }
 
+
 // State returned here is a tuple of keys, suitable for usage as an `args` argument.
 static PyObject*
 fam___setstate__(FAMObject *self, PyObject *state)
 {
+    if (!PyTuple_CheckExact(state) || !PyTuple_GET_SIZE(state)) {
+        PyErr_SetString(PyExc_ValueError, "Unexpected pickled object.");
+        return NULL;
+    }
     PyObject *keys = PyTuple_GetItem(state, 0);
     if (PyArray_Check(keys)) {
-        // if we get an array coming back from a pickle, we must make it immutable
+        // if we an array, make it immutable
         PyArray_CLEARFLAGS((PyArrayObject*)keys, NPY_ARRAY_WRITEABLE);
     }
     fam_init((PyObject*)self, state, NULL);
