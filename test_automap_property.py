@@ -77,6 +77,9 @@ def test_am___contains__(keys: Keys, others: Keys) -> None:
 
 @given(keys=get_array())
 def test_fam_array___contains__(keys: Keys) -> None:
+    print(
+        "keys", keys.dtype, keys.dtype.byteorder, "contiguous:", keys.flags.c_contiguous
+    )
     fam = FrozenAutoMap(keys)
     for key in keys:
         assert key in fam
