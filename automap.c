@@ -422,42 +422,35 @@ fami_iternext(FAMIObject *self)
     switch (self->kind) {
         case ITEMS: {
             if (self->fam->keys_array_type) {
-
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
-                // assuming a non-borrowed reference from array
                 return PyTuple_Pack(
                     2,
                     // PyArray_ToScalar(PyArray_GETPTR1(a, index), a),
                     PyArray_GETITEM(a, PyArray_GETPTR1(a, index)),
                     self->int_cache_fast[index]
-                    // PyList_GET_ITEM(int_cache, index)
                 );
             }
             else {
                 return PyTuple_Pack(
                     2,
-                    // PyList_GET_ITEM(self->fam->keys, index),
                     self->keys_fast[index],
                     self->int_cache_fast[index]
-                    // PyList_GET_ITEM(int_cache, index)
                 );
             }
         }
         case KEYS: {
             if (self->fam->keys_array_type) {
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
-                return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
                 // return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
+                return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
             }
             else {
-                // PyObject *yield = PyList_GET_ITEM(self->fam->keys, index);
                 PyObject* yield = self->keys_fast[index];
                 Py_INCREF(yield);
                 return yield;
             }
         }
         case VALUES: {
-            // PyObject *yield = PyList_GET_ITEM(int_cache, index);
             PyObject *yield = self->int_cache_fast[index];
             Py_INCREF(yield);
             return yield;
@@ -976,16 +969,16 @@ lookup(FAMObject *self, PyObject *key) {
             PyArray_ScalarAsCtype(key, &temp);
             v = (npy_int64)temp;
         }
-        else if (PyArray_IsScalar(key, Int)) {
-            npy_int temp;
-            PyArray_ScalarAsCtype(key, &temp);
-            v = (npy_int64)temp;
-        }
-        else if (PyArray_IsScalar(key, Long)) {
-            npy_long temp;
-            PyArray_ScalarAsCtype(key, &temp);
-            v = (npy_int64)temp;
-        }
+        // else if (PyArray_IsScalar(key, Int)) {
+        //     npy_int temp;
+        //     PyArray_ScalarAsCtype(key, &temp);
+        //     v = (npy_int64)temp;
+        // }
+        // else if (PyArray_IsScalar(key, Long)) {
+        //     npy_long temp;
+        //     PyArray_ScalarAsCtype(key, &temp);
+        //     v = (npy_int64)temp;
+        // }
         else if (PyArray_IsScalar(key, LongLong)) {
             npy_longlong temp;
             PyArray_ScalarAsCtype(key, &temp);
@@ -1173,8 +1166,7 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
         }
     }
     // table position is not dependent on keys_pos
-    Py_ssize_t table_pos;
-    table_pos = lookup_hash(self, key, hash);
+    Py_ssize_t table_pos = lookup_hash(self, key, hash);
 
     if (table_pos < 0) {
         return -1;
@@ -1201,8 +1193,7 @@ insert_int(
         hash = int_to_hash(key);
     }
     // table position is not dependent on keys_pos
-    Py_ssize_t table_pos;
-    table_pos = lookup_hash_int(self, key, hash);
+    Py_ssize_t table_pos = lookup_hash_int(self, key, hash);
 
     if (table_pos < 0) {
         return -1;
@@ -1227,8 +1218,7 @@ insert_uint(
     if (hash == -1) {
         hash = uint_to_hash(key);
     }
-    Py_ssize_t table_pos;
-    table_pos = lookup_hash_uint(self, key, hash);
+    Py_ssize_t table_pos = lookup_hash_uint(self, key, hash);
 
     if (table_pos < 0) {
         return -1;
@@ -1255,8 +1245,7 @@ insert_float(
         hash = double_to_hash(key);
     }
     // table position is not dependent on keys_pos
-    Py_ssize_t table_pos;
-    table_pos = lookup_hash_float(self, key, hash);
+    Py_ssize_t table_pos = lookup_hash_float(self, key, hash);
 
     if (table_pos < 0) {
         return -1;
@@ -1283,8 +1272,7 @@ insert_unicode(
         hash = UCS4_to_hash(key, key_size);
     }
     // table position is not dependent on keys_pos
-    Py_ssize_t table_pos;
-    table_pos = lookup_hash_unicode(self, key, key_size, hash);
+    Py_ssize_t table_pos = lookup_hash_unicode(self, key, key_size, hash);
     if (table_pos < 0) {
         return -1;
     }
@@ -1311,8 +1299,7 @@ insert_string(
         hash = char_to_hash(key, key_size);
     }
     // table position is not dependent on keys_pos
-    Py_ssize_t table_pos;
-    table_pos = lookup_hash_string(self, key, key_size, hash);
+    Py_ssize_t table_pos = lookup_hash_string(self, key, key_size, hash);
     if (table_pos < 0) {
         return -1;
     }
@@ -1764,7 +1751,7 @@ else {\
 static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
-    // NOTE: original fam_new used to be able to provide a same reference back if fam was in the args; this is tricky now that we have fam_init
+    // NOTE: original fam_new used to be able to provide a same reference back if a fam was in the args; this is tricky now that we have fam_init
 
     FAMObject *self = (FAMObject *)cls->tp_alloc(cls, 0);
     if (!self) {
@@ -1808,7 +1795,6 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
     }
     else if (PyArray_Check(keys)) {
         PyArrayObject *a = (PyArrayObject *)keys;
-
         if (PyArray_NDIM(a) != 1) {
             PyErr_SetString(PyExc_TypeError, "Arrays must be 1-dimensional");
             return -1;
