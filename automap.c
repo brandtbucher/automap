@@ -981,16 +981,16 @@ lookup(FAMObject *self, PyObject *key) {
             PyArray_ScalarAsCtype(key, &temp);
             v = (Py_ssize_t)temp;
         }
-        else if (PyArray_IsScalar(key, Long)) {
-            npy_long temp;
-            PyArray_ScalarAsCtype(key, &temp);
-            v = (Py_ssize_t)temp;
-        }
-        else if (PyArray_IsScalar(key, LongLong)) {
-            npy_longlong temp;
-            PyArray_ScalarAsCtype(key, &temp);
-            v = (Py_ssize_t)temp;
-        }
+        // else if (PyArray_IsScalar(key, Long)) {
+        //     npy_long temp;
+        //     PyArray_ScalarAsCtype(key, &temp);
+        //     v = (Py_ssize_t)temp;
+        // }
+        // else if (PyArray_IsScalar(key, LongLong)) {
+        //     npy_longlong temp;
+        //     PyArray_ScalarAsCtype(key, &temp);
+        //     v = (Py_ssize_t)temp;
+        // }
         else if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {
