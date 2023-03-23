@@ -1442,9 +1442,7 @@ copy(PyTypeObject *cls, FAMObject *self)
         Py_INCREF(self);
         return self;
     }
-    // FAMObject *new = (FAMObject *)cls->tp_alloc(cls, 0);
-
-    // fam_new to intialize struct attrs
+    // fam_new to allocate and full struct attrs
     FAMObject *new = (FAMObject*)fam_new(cls, NULL, NULL);
     if (!new) {
         return NULL;
@@ -1719,7 +1717,7 @@ if (contiguous) {                                       \
     npy_type* b = (npy_type*)PyArray_DATA(a);           \
     npy_type* b_end = b + keys_size;                    \
     while (b < b_end) {                                 \
-        if (insert_func(fam, *b, i, -1)) {             \
+        if (insert_func(fam, *b, i, -1)) {              \
             goto error;                                 \
         }                                               \
         b++;                                            \
@@ -1728,7 +1726,7 @@ if (contiguous) {                                       \
 }                                                       \
 else {                                                  \
     for (; i < keys_size; i++) {                        \
-        if (insert_func(fam,                           \
+        if (insert_func(fam,                            \
                 *(npy_type*)PyArray_GETPTR1(a, i),      \
                 i,                                      \
                 -1)) {                                  \
@@ -1741,7 +1739,8 @@ else {                                                  \
 static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
-    // DEBUG_MSG_OBJ("calling fam_new", args);
+    // NOTE: original fam_new used to be able to provide a same reference back if fam was in the args; this is tricky now that we have fam_init
+
     FAMObject *self = (FAMObject *)cls->tp_alloc(cls, 0);
     if (!self) {
         return NULL;
@@ -1759,8 +1758,6 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 int
 fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
 {
-    // DEBUG_MSG_OBJ("calling fam_int", args);
-
     PyTypeObject* cls = Py_TYPE(self); // borrowed ref
     const char *name = cls->tp_name;
     FAMObject* fam = (FAMObject*)self;
@@ -1770,12 +1767,12 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
         return -1;
     }
 
+    int keys_array_type = KAT_LIST;
+
     PyObject *keys = NULL;
     if (!PyArg_UnpackTuple(args, name, 0, 1, &keys)) {
         return -1;
     }
-
-    int keys_array_type = KAT_LIST;
 
     if (!keys) {
         keys = PyList_New(0);
@@ -1950,7 +1947,6 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
     }
     return 0;
 error:
-    // Py_DECREF(self);
     return -1;
 }
 

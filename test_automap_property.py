@@ -142,15 +142,10 @@ def test_am_pickle(keys: Keys) -> None:
     assert pickle.loads(pickle.dumps(a)) == a
 
 
-# NOTE: need to set arrays to be immutable on unpickling
-# @given(keys=get_array())
-# def test_fam_array_pickle(keys: Keys) -> None:
-#     try:
-#         hypothesis.assume(pickle.loads(pickle.dumps(keys)) == keys)
-#     except (TypeError, pickle.PicklingError):
-#         hypothesis.assume(False)
-#     a = FrozenAutoMap(keys)
-#     assert pickle.loads(pickle.dumps(a)) == a
+@given(keys=get_array())
+def test_fam_array_pickle(keys: Keys) -> None:
+    a = FrozenAutoMap(keys)
+    assert list(pickle.loads(pickle.dumps(a))) == list(a)
 
 
 @given(keys=hypothesis.infer)
