@@ -1618,8 +1618,7 @@ fam_hash(FAMObject *self)
     for (Py_ssize_t i = 0; i < self->table_size; i++) {
         hash = hash * 3 + self->table[i].hash;
     }
-    // just in case we got a hash of -1, fix it
-    if (hash == -1) {
+    if (hash == -1) { // most not return -1
         return 0;
     }
     return hash;
@@ -1699,6 +1698,7 @@ fam_values(FAMObject *self)
     return famv_new(self, VALUES);
 }
 
+
 // This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`.
 # define INSERT_SCALARS(npy_type, insert_func)          \
 if (contiguous) {                                       \
@@ -1724,29 +1724,30 @@ else {                                                  \
 }                                                       \
 
 
+// This macro is for inserting flexible-sized types, Unicode (Py_UCS4) or strings (char).  Uses context of `fam_init`.
 # define INSERT_FLEXIBLE(char_type, insert_func, get_end_func) \
-char_type* p = NULL;\
-if (contiguous) {\
-    char_type *b = (char_type*)PyArray_DATA(a);\
-    char_type *b_end = b + keys_size * dt_size;\
-    while (b < b_end) {\
-        p = get_end_func(b, dt_size);\
-        if (insert_func(fam, b, p-b, i, -1)) {\
-            goto error;\
-        }\
-        b += dt_size;\
-        i++;\
-    }\
-}\
-else {\
-    for (; i < keys_size; i++) {\
-        char_type* v = (char_type*)PyArray_GETPTR1(a, i);\
-        p = get_end_func(v, dt_size);\
-        if (insert_func(fam, v, p-v, i, -1)) {\
-            goto error;\
-        }\
-    }\
-}\
+char_type* p = NULL;                                           \
+if (contiguous) {                                              \
+    char_type *b = (char_type*)PyArray_DATA(a);                \
+    char_type *b_end = b + keys_size * dt_size;                \
+    while (b < b_end) {                                        \
+        p = get_end_func(b, dt_size);                          \
+        if (insert_func(fam, b, p-b, i, -1)) {                 \
+            goto error;                                        \
+        }                                                      \
+        b += dt_size;                                          \
+        i++;                                                   \
+    }                                                          \
+}                                                              \
+else {                                                         \
+    for (; i < keys_size; i++) {                               \
+        char_type* v = (char_type*)PyArray_GETPTR1(a, i);      \
+        p = get_end_func(v, dt_size);                          \
+        if (insert_func(fam, v, p-v, i, -1)) {                 \
+            goto error;                                        \
+        }                                                      \
+    }                                                          \
+}                                                              \
 
 static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
