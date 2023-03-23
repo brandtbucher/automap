@@ -31,7 +31,7 @@ def get_array() -> st.SearchStrategy:
     def proc(a: np.ndarray, contiguous: bool):
         if a.dtype.kind in ("f", "c"):
             a = a[~np.isnan(a)]
-        if a.dtype.kind in ("m",):
+        elif a.dtype.kind in ("m", "M"):
             a = a[~np.isnat(a)]
 
         if a.dtype.byteorder not in VALID_BYTE_ORDERS:
