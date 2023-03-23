@@ -750,10 +750,10 @@ lookup_hash_int(FAMObject *self, npy_int64 key, Py_hash_t hash)
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             h = table[table_pos].hash;
-            if (h == -1) { // Miss. Found a position that can be used for insertion.
+            if (h == -1) { // Miss. Position that can be used for insertion.
                 return table_pos;
             }
-            if (h != hash) { // Collision.
+            if (h != hash) {
                 table_pos++;
                 continue;
             }
@@ -773,7 +773,7 @@ lookup_hash_int(FAMObject *self, npy_int64 key, Py_hash_t hash)
                 default:
                     return -1;
             }
-            if (key == k) { // Hit.
+            if (key == k) {
                 return table_pos;
             }
             table_pos++;
