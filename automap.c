@@ -1,4 +1,3 @@
-// TODO: More tests.
 // TODO: Rewrite performance tests using pyperf.
 // TODO: Group similar functionality.
 // TODO: Check refcounts when calling into hash and comparison functions.
@@ -6,7 +5,6 @@
 // TODO: Subinterpreter support.
 // TODO: Docstrings and stubs.
 // TODO: GC support.
-// TODO: More comments.
 
 
 /*******************************************************************************
@@ -111,8 +109,6 @@ really gives us our awesome performance.
 
 *******************************************************************************/
 # include <math.h>
-# include <stdio.h>
-
 # define PY_SSIZE_T_CLEAN
 # include "Python.h"
 
@@ -338,7 +334,9 @@ char_to_hash(char *str, Py_ssize_t len) {
 // the global int_cache is shared among all instances
 
 static PyObject *int_cache = NULL;
-static Py_ssize_t key_count_global = 0;
+
+// NOTE: this used to be a Py_ssize_t, which can be 32 bits on some machines and might easily overflow with a few very large indices. Using an explicit 64-bit int seems safer
+static npy_int64 key_count_global = 0;
 
 // Fill the int_cache up to size_needed with PyObject ints; `size` is not the key_count_global.
 static int
@@ -749,9 +747,7 @@ lookup_hash_int(FAMObject *self, npy_int64 key, Py_hash_t hash)
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
-
             h = table[table_pos].hash;
-            fprintf(stderr, "lookup key: %lld hash: %lld h: %lld\n", (long long)key, (long long)hash, (long long)h);
             if (h == -1) { // Miss. Position that can be used for insertion.
                 return table_pos;
             }
@@ -996,7 +992,7 @@ lookup(FAMObject *self, PyObject *key) {
         else if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {
-                // PyErr_Clear();
+                PyErr_Clear();
                 return -1;
             }
             v = (npy_int64)dv; // truncate to integer
@@ -1007,10 +1003,8 @@ lookup(FAMObject *self, PyObject *key) {
         else if (PyLong_Check(key)) {
             int error;
             v = PyLong_AsLongLongAndOverflow(key, &error);
-            DEBUG_MSG_OBJ("got key", key);
-            fprintf(stderr, "converted to: %lld\n", (long long)v);
             if (error) {
-                // PyErr_Clear();
+                PyErr_Clear();
                 return -1;
             }
         }
@@ -1021,8 +1015,6 @@ lookup(FAMObject *self, PyObject *key) {
             return -1;
         }
         Py_hash_t hash = int_to_hash(v);
-        fprintf(stderr, "converted to hash: %lld %lld \n", (long long)v, (long long)hash);
-
         table_pos = lookup_hash_int(self, v, hash);
     }
     else if (self->keys_array_type >= KAT_UINT8
@@ -1071,7 +1063,7 @@ lookup(FAMObject *self, PyObject *key) {
         else if (PyLong_Check(key)) {
             v = PyLong_AsUnsignedLongLong(key);
             if (v == (npy_uint64)-1 && PyErr_Occurred()) {
-                // PyErr_Clear();
+                PyErr_Clear();
                 return -1;
             }
         }
