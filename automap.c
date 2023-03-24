@@ -112,6 +112,7 @@ really gives us our awesome performance.
 *******************************************************************************/
 # include <math.h>
 # include <stdio.h>
+
 # define PY_SSIZE_T_CLEAN
 # include "Python.h"
 
@@ -251,15 +252,20 @@ char_get_end_p(char* p, Py_ssize_t dt_size) {
 
 static inline Py_hash_t
 uint_to_hash(npy_uint64 v) {
-    return (Py_hash_t)v >> 1; // divide by 2 so it always fits in signed space
+    Py_hash_t h = (Py_hash_t)(v >> 1); // divide by 2 so it always fits in signed space
+    if (h == -1) { // error code in Python hashing
+        return -2;
+    }
+    return h;
 }
 
 static inline Py_hash_t
 int_to_hash(npy_int64 v) {
-    if (v == -1) { // error code in Python hashing
+    Py_hash_t h = (Py_hash_t)v;
+    if (h == -1) { // error code in Python hashing
         return -2;
     }
-    return (Py_hash_t)v;
+    return h;
 }
 
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
