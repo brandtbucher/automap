@@ -997,12 +997,11 @@ lookup(FAMObject *self, PyObject *key) {
         }
         else if (PyNumber_Check(key)) {
             // NOTE: this works for ints and bools
-            Py_ssize_t temp = PyNumber_AsSsize_t(key, PyExc_OverflowError);
+            v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
                 return -1;
             }
-            v = (npy_int64)temp;
         }
         else {
             return -1;
