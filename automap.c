@@ -1700,12 +1700,14 @@ fam_values(FAMObject *self)
 
 
 // This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`.
-# define INSERT_SCALARS(npy_type, insert_func)          \
+# define INSERT_SCALARS(npy_type_src, npy_type_dst, insert_func) \
 if (contiguous) {                                       \
-    npy_type* b = (npy_type*)PyArray_DATA(a);           \
-    npy_type* b_end = b + keys_size;                    \
+    npy_type_dst temp = 0; \
+    npy_type_src* b = (npy_type_src*)PyArray_DATA(a);           \
+    npy_type_src* b_end = b + keys_size;                    \
     while (b < b_end) {                                 \
-        if (insert_func(fam, *b, i, -1)) {              \
+        temp = *b; \
+        if (insert_func(fam, temp, i, -1)) {              \
             goto error;                                 \
         }                                               \
         b++;                                            \
@@ -1713,9 +1715,11 @@ if (contiguous) {                                       \
     }                                                   \
 }                                                       \
 else {                                                  \
+    npy_type_dst temp = 0; \
     for (; i < keys_size; i++) {                        \
+        temp = *(npy_type_src*)PyArray_GETPTR1(a, i); \
         if (insert_func(fam,                            \
-                *(npy_type*)PyArray_GETPTR1(a, i),      \
+                temp,      \
                 i,                                      \
                 -1)) {                                  \
             goto error;                                 \
@@ -1855,37 +1859,37 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
         int contiguous = PyArray_IS_C_CONTIGUOUS(a);
         switch (keys_array_type) {
             case KAT_INT64:
-                INSERT_SCALARS(npy_int64, insert_int);
+                INSERT_SCALARS(npy_int64, npy_int64, insert_int);
                 break;
             case KAT_INT32:
-                INSERT_SCALARS(npy_int32, insert_int);
+                INSERT_SCALARS(npy_int32, npy_int64, insert_int);
                 break;
             case KAT_INT16:
-                INSERT_SCALARS(npy_int16, insert_int);
+                INSERT_SCALARS(npy_int16, npy_int64, insert_int);
                 break;
             case KAT_INT8:
-                INSERT_SCALARS(npy_int8, insert_int);
+                INSERT_SCALARS(npy_int8, npy_int64, insert_int);
                 break;
             case KAT_UINT64:
-                INSERT_SCALARS(npy_uint64, insert_uint);
+                INSERT_SCALARS(npy_uint64, npy_uint64, insert_uint);
                 break;
             case KAT_UINT32:
-                INSERT_SCALARS(npy_uint32, insert_uint);
+                INSERT_SCALARS(npy_uint32, npy_uint64, insert_uint);
                 break;
             case KAT_UINT16:
-                INSERT_SCALARS(npy_uint16, insert_uint);
+                INSERT_SCALARS(npy_uint16, npy_uint64, insert_uint);
                 break;
             case KAT_UINT8:
-                INSERT_SCALARS(npy_uint8, insert_uint);
+                INSERT_SCALARS(npy_uint8, npy_uint64, insert_uint);
                 break;
             case KAT_FLOAT64:
-                INSERT_SCALARS(npy_double, insert_float);
+                INSERT_SCALARS(npy_double, npy_double, insert_float);
                 break;
             case KAT_FLOAT32:
-                INSERT_SCALARS(npy_float, insert_float);
+                INSERT_SCALARS(npy_float, npy_double, insert_float);
                 break;
             case KAT_FLOAT16:
-                INSERT_SCALARS(npy_half, insert_float);
+                INSERT_SCALARS(npy_half, npy_double, insert_float);
                 break;
             case KAT_UNICODE: {
                 // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
