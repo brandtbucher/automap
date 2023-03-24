@@ -743,7 +743,9 @@ lookup_hash_int(FAMObject *self, npy_int64 key, Py_hash_t hash)
 
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
+
             h = table[table_pos].hash;
+            fprintf(stderr, "lookup key: %lld hash: %lld h: %lld\n", (long long)key, (long long)hash, (long long)h);
             if (h == -1) { // Miss. Position that can be used for insertion.
                 return table_pos;
             }
@@ -1013,6 +1015,8 @@ lookup(FAMObject *self, PyObject *key) {
             return -1;
         }
         Py_hash_t hash = int_to_hash(v);
+        fprintf(stderr, "converted to hash: %lld %lld \n", (long long)v, (long long)hash);
+
         table_pos = lookup_hash_int(self, v, hash);
     }
     else if (self->keys_array_type >= KAT_UINT8
