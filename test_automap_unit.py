@@ -283,7 +283,7 @@ def test_fam_array_int_get_f2():
 
     fam = FrozenAutoMap(a1)
     print(
-        f"{fam=} {a1.dtype=} {a1.dtype.byteorder=} {a1.flags.c_contiguous}",
+        f"{fam} dtype {a1.dtype} byteorder {a1.dtype.byteorder} c-contiguous {a1.flags.c_contiguous}",
         file=sys.stderr,
     )
 

@@ -995,13 +995,16 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else if (PyNumber_Check(key)) {
-            // NOTE: this works for ints and bools
-            v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (PyErr_Occurred()) {
+        else if (PyLong_Check(key)) {
+            v = PyLong_AsLongLong(key);
+            if (v == -1 && PyErr_Occurred()) {
                 PyErr_Clear();
                 return -1;
             }
+        }
+        else if (PyNumber_Check(key)) {
+            // NOTE: this works for ints and bools
+            v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
         }
         else {
             return -1;
