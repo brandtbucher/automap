@@ -248,20 +248,20 @@ char_get_end_p(char* p, Py_ssize_t dt_size) {
 
 static inline Py_hash_t
 uint_to_hash(npy_uint64 v) {
-    Py_hash_t h = (Py_hash_t)(v >> 1); // divide by 2 so it always fits in signed space
-    if (h == -1) { // error code in Python hashing
+    Py_hash_t hash = (Py_hash_t)(v >> 1); // divide by 2 so it always fits in signed space
+    if (hash == -1) {
         return -2;
     }
-    return h;
+    return hash;
 }
 
 static inline Py_hash_t
 int_to_hash(npy_int64 v) {
-    Py_hash_t h = (Py_hash_t)v;
-    if (h == -1) { // error code in Python hashing
+    Py_hash_t hash = (Py_hash_t)v;
+    if (hash == -1) {
         return -2;
     }
-    return h;
+    return hash;
 }
 
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
@@ -314,6 +314,9 @@ UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
     while (p < p_end) {
         hash = ((hash << 5) + hash) + *p++;
     }
+    if (hash == -1) {
+        return -2;
+    }
     return hash;
 }
 
@@ -325,6 +328,9 @@ char_to_hash(char *str, Py_ssize_t len) {
     Py_hash_t hash = 5381;
     while (p < p_end) {
         hash = ((hash << 5) + hash) + *p++;
+    }
+    if (hash == -1) {
+        return -2;
     }
     return hash;
 }
