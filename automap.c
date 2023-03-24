@@ -111,6 +111,7 @@ really gives us our awesome performance.
 
 *******************************************************************************/
 # include <math.h>
+# include <stdio.h>
 # define PY_SSIZE_T_CLEAN
 # include "Python.h"
 
@@ -250,7 +251,7 @@ char_get_end_p(char* p, Py_ssize_t dt_size) {
 
 static inline Py_hash_t
 uint_to_hash(npy_uint64 v) {
-    return v >> 1; // divide by 2 so it always fits in signed space
+    return (Py_hash_t)v >> 1; // divide by 2 so it always fits in signed space
 }
 
 static inline Py_hash_t
@@ -258,7 +259,7 @@ int_to_hash(npy_int64 v) {
     if (v == -1) { // error code in Python hashing
         return -2;
     }
-    return v;
+    return (Py_hash_t)v;
 }
 
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
@@ -995,21 +996,19 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else if (PyBool_Check(key)) {
-            v = PyObject_IsTrue(key);
-        }
         else if (PyLong_Check(key)) {
             int error;
             v = PyLong_AsLongLongAndOverflow(key, &error);
+            DEBUG_MSG_OBJ("got key", key);
+            fprintf(stderr, "converted to: %lld\n", (long long)v);
             if (error) {
                 // PyErr_Clear();
                 return -1;
             }
         }
-        // else if (PyNumber_Check(key)) {
-        //     // NOTE: this works for ints and bools
-        //     v = PyNumber_AsSsize_t(key, PyExc_OverflowError);
-        // }
+        else if (PyBool_Check(key)) {
+            v = PyObject_IsTrue(key);
+        }
         else {
             return -1;
         }
@@ -1059,17 +1058,12 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else if (PyNumber_Check(key)) {
-            Py_ssize_t temp;
-            temp = PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (PyErr_Occurred()) {
-                PyErr_Clear();
+        else if (PyLong_Check(key)) {
+            v = PyLong_AsUnsignedLongLong(key);
+            if (v == (npy_uint64)-1 && PyErr_Occurred()) {
+                // PyErr_Clear();
                 return -1;
             }
-            if (temp < 0) {
-                return -1;
-            }
-            v = (npy_uint64)temp;
         }
         else if (PyBool_Check(key)) {
             v = PyObject_IsTrue(key);
@@ -1103,12 +1097,8 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else if (PyNumber_Check(key)) {
-            v = (double)PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
+        else if (PyLong_Check(key)) {
+
         }
         else if (PyBool_Check(key)) {
             v = PyObject_IsTrue(key);
