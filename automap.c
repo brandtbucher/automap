@@ -999,8 +999,9 @@ lookup(FAMObject *self, PyObject *key) {
             v = PyObject_IsTrue(key);
         }
         else if (PyLong_Check(key)) {
-            v = PyLong_AsLongLong(key);
-            if (v == -1 && PyErr_Occurred()) {
+            int error;
+            v = PyLong_AsLongLongAndOverflow(key, &error);
+            if (error) {
                 // PyErr_Clear();
                 return -1;
             }

@@ -289,7 +289,7 @@ def test_fam_array_int_get_f2():
 
     assert fam.get(np.iinfo(ctype).min) == 0
     assert fam.get(np.iinfo(ctype).max) == 1
-
+    import ipdb; ipdb.set_trace()
 
 # ------------------------------------------------------------------------------
 
