@@ -959,16 +959,16 @@ lookup(FAMObject *self, PyObject *key) {
             && self->keys_array_type <= KAT_INT64) {
         npy_int64 v = 0;
 
-        if (PyArray_IsScalar(key, Byte)) {
-            npy_byte temp;
-            PyArray_ScalarAsCtype(key, &temp);
-            v = (npy_int64)temp;
-        }
-        else if (PyArray_IsScalar(key, Short)) {
-            npy_short temp;
-            PyArray_ScalarAsCtype(key, &temp);
-            v = (npy_int64)temp;
-        }
+        // if (PyArray_IsScalar(key, Byte)) {
+        //     npy_byte temp;
+        //     PyArray_ScalarAsCtype(key, &temp);
+        //     v = (npy_int64)temp;
+        // }
+        // else if (PyArray_IsScalar(key, Short)) {
+        //     npy_short temp;
+        //     PyArray_ScalarAsCtype(key, &temp);
+        //     v = (npy_int64)temp;
+        // }
         // else if (PyArray_IsScalar(key, Int)) {
         //     npy_int temp;
         //     PyArray_ScalarAsCtype(key, &temp);
@@ -979,12 +979,12 @@ lookup(FAMObject *self, PyObject *key) {
         //     PyArray_ScalarAsCtype(key, &temp);
         //     v = (npy_int64)temp;
         // }
-        else if (PyArray_IsScalar(key, LongLong)) {
-            npy_longlong temp;
-            PyArray_ScalarAsCtype(key, &temp);
-            v = (npy_int64)temp;
-        }
-        else if (PyFloat_Check(key)) {
+        // else if (PyArray_IsScalar(key, LongLong)) {
+        //     npy_longlong temp;
+        //     PyArray_ScalarAsCtype(key, &temp);
+        //     v = (npy_int64)temp;
+        // }
+        if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {
                 PyErr_Clear();
