@@ -390,6 +390,7 @@ typedef struct {
     PyObject_VAR_HEAD
     FAMObject *fam;
     PyObject **keys_fi; // fast items ptr
+    PyArrayObject* keys_array;
     PyObject **int_cache_fi; // fast items ptr
     ViewKind kind;
     int reversed;
@@ -433,11 +434,9 @@ fami_iternext(FAMIObject *self)
     switch (self->kind) {
         case ITEMS: {
             if (self->fam->keys_array_type) {
-                PyArrayObject *a = (PyArrayObject *)self->fam->keys;
                 return PyTuple_Pack(
                     2,
-                    PyArray_ToScalar(PyArray_GETPTR1(a, index), a),
-                    // PyArray_GETITEM(a, PyArray_GETPTR1(a, index)),
+                    PyArray_ToScalar(PyArray_GETPTR1(self->keys_array, index), self->keys_array),
                     self->int_cache_fi[index]
                 );
             }
@@ -451,9 +450,7 @@ fami_iternext(FAMIObject *self)
         }
         case KEYS: {
             if (self->fam->keys_array_type) {
-                PyArrayObject *a = (PyArrayObject *)self->fam->keys;
-                return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
-                // return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
+                return PyArray_ToScalar(PyArray_GETPTR1(self->keys_array, index), self->keys_array);
             }
             else {
                 PyObject* yield = self->keys_fi[index];
@@ -518,9 +515,11 @@ fami_new(FAMObject *fam, ViewKind kind, int reversed)
     fami->fam = fam;
     if (!fam->keys_array_type) {
         fami->keys_fi = PySequence_Fast_ITEMS(fam->keys);
+        fami->keys_array = NULL;
     }
     else {
         fami->keys_fi = NULL;
+        fami->keys_array = (PyArrayObject *)fam->keys;
     }
     fami->int_cache_fi = PySequence_Fast_ITEMS(int_cache);
     fami->kind = kind;

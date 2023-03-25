@@ -264,6 +264,7 @@ def test_fam_array_int_get_f1():
     fam = FrozenAutoMap(a1)
     assert list(fam.keys()) == [np.iinfo(ctype).min, np.iinfo(ctype).max]
 
+
 def test_fam_array_int_get_f2():
     ctype = np.int64
     a1 = np.array([np.iinfo(ctype).min, np.iinfo(ctype).max], dtype=ctype)
@@ -272,6 +273,7 @@ def test_fam_array_int_get_f2():
     fam = FrozenAutoMap(a1)
     assert fam.get(np.iinfo(ctype).min) == 0
     assert fam.get(np.iinfo(ctype).max) == 1
+
 
 # ------------------------------------------------------------------------------
 
@@ -415,6 +417,14 @@ def test_fam_array_keys_a():
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
     assert list(fam.keys()) == [10, 20, 30, 40]
+
+
+def test_fam_array_keys_a():
+    a1 = np.array((10, 20, 30, 40), dtype=np.int8)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    e = next(iter(fam))
+    assert isinstance(e, np.int8)
 
 
 def test_fam_array_items_a():

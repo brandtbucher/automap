@@ -26,7 +26,6 @@ The type of `key_count_global` is now a platform independent 64 bit signed integ
 
 
 TODO:
-iteration must return scalars
 alterantive scalar to C type with PyArrayScalar_VAL(e, Long)
 
 
