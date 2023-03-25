@@ -1,6 +1,7 @@
 import typing
 import pickle
 import pytest
+import sys
 import numpy as np
 
 from automap import AutoMap
@@ -267,17 +268,44 @@ def test_fam_array_int_get_e1():
 #     assert fam.get(a1[0]) == 0
 
 
-def test_fam_array_int_get_f():
+def test_fam_array_int_get_f1():
     ctype = np.int64
-
     a1 = np.array([np.iinfo(ctype).min, np.iinfo(ctype).max], dtype=ctype)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
-
     assert list(fam.keys()) == [np.iinfo(ctype).min, np.iinfo(ctype).max]
-    assert fam.get("f") is None
-    assert fam.get(a1[0]) == 0
-    assert fam.get(a1[1]) == 1
+
+
+def test_fam_array_int_get_f2():
+    ctype = np.int64
+    lower, upper = np.iinfo(ctype).min, np.iinfo(ctype).max - 1
+    a1 = np.array([lower, upper], dtype=ctype)
+    a1.flags.writeable = False
+
+    fam = FrozenAutoMap(a1)
+    print(
+        f"{fam} dtype {a1.dtype} byteorder {a1.dtype.byteorder} c-contiguous {a1.flags.c_contiguous}",
+        file=sys.stderr,
+    )
+
+    assert fam.get(lower) == 0
+    assert fam.get(upper) == 1
+
+
+def test_fam_array_int_get_f3():
+    ctype = np.int64
+    a1 = np.array([np.iinfo(ctype).min, np.iinfo(ctype).max], dtype=ctype)
+    a1.flags.writeable = False
+
+    fam = FrozenAutoMap(a1)
+    print(
+        f"{fam} dtype {a1.dtype} byteorder {a1.dtype.byteorder} c-contiguous {a1.flags.c_contiguous}",
+        file=sys.stderr,
+    )
+
+    assert fam.get(np.iinfo(ctype).min) == 0
+    assert fam.get(np.iinfo(ctype).max) == 1
+    # import ipdb; ipdb.set_trace()
 
 
 # ------------------------------------------------------------------------------

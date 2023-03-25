@@ -1,4 +1,3 @@
-// TODO: More tests.
 // TODO: Rewrite performance tests using pyperf.
 // TODO: Group similar functionality.
 // TODO: Check refcounts when calling into hash and comparison functions.
@@ -6,7 +5,6 @@
 // TODO: Subinterpreter support.
 // TODO: Docstrings and stubs.
 // TODO: GC support.
-// TODO: More comments.
 
 
 /*******************************************************************************
@@ -250,15 +248,20 @@ char_get_end_p(char* p, Py_ssize_t dt_size) {
 
 static inline Py_hash_t
 uint_to_hash(npy_uint64 v) {
-    return v >> 1; // divide by 2 so it always fits in signed space
+    Py_hash_t hash = (Py_hash_t)(v >> 1); // divide by 2 so it always fits in signed space
+    if (hash == -1) {
+        return -2;
+    }
+    return hash;
 }
 
 static inline Py_hash_t
 int_to_hash(npy_int64 v) {
-    if (v == -1) { // error code in Python hashing
+    Py_hash_t hash = (Py_hash_t)v;
+    if (hash == -1) {
         return -2;
     }
-    return v;
+    return hash;
 }
 
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
@@ -311,6 +314,9 @@ UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
     while (p < p_end) {
         hash = ((hash << 5) + hash) + *p++;
     }
+    if (hash == -1) {
+        return -2;
+    }
     return hash;
 }
 
@@ -323,6 +329,9 @@ char_to_hash(char *str, Py_ssize_t len) {
     while (p < p_end) {
         hash = ((hash << 5) + hash) + *p++;
     }
+    if (hash == -1) {
+        return -2;
+    }
     return hash;
 }
 
@@ -331,7 +340,9 @@ char_to_hash(char *str, Py_ssize_t len) {
 // the global int_cache is shared among all instances
 
 static PyObject *int_cache = NULL;
-static Py_ssize_t key_count_global = 0;
+
+// NOTE: this used to be a Py_ssize_t, which can be 32 bits on some machines and might easily overflow with a few very large indices. Using an explicit 64-bit int seems safer
+static npy_int64 key_count_global = 0;
 
 // Fill the int_cache up to size_needed with PyObject ints; `size` is not the key_count_global.
 static int
@@ -969,16 +980,16 @@ lookup(FAMObject *self, PyObject *key) {
             PyArray_ScalarAsCtype(key, &temp);
             v = (npy_int64)temp;
         }
-        // else if (PyArray_IsScalar(key, Int)) {
-        //     npy_int temp;
-        //     PyArray_ScalarAsCtype(key, &temp);
-        //     v = (npy_int64)temp;
-        // }
-        // else if (PyArray_IsScalar(key, Long)) {
-        //     npy_long temp;
-        //     PyArray_ScalarAsCtype(key, &temp);
-        //     v = (npy_int64)temp;
-        // }
+        else if (PyArray_IsScalar(key, Int)) {
+            npy_int temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (npy_int64)temp;
+        }
+        else if (PyArray_IsScalar(key, Long)) {
+            npy_long temp;
+            PyArray_ScalarAsCtype(key, &temp);
+            v = (npy_int64)temp;
+        }
         else if (PyArray_IsScalar(key, LongLong)) {
             npy_longlong temp;
             PyArray_ScalarAsCtype(key, &temp);
@@ -995,14 +1006,16 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else if (PyNumber_Check(key)) {
-            // NOTE: this works for ints and bools
-            Py_ssize_t temp = PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (PyErr_Occurred()) {
+        else if (PyLong_Check(key)) {
+            int error;
+            v = PyLong_AsLongLongAndOverflow(key, &error);
+            if (error) {
                 PyErr_Clear();
                 return -1;
             }
-            v = (npy_int64)temp;
+        }
+        else if (PyBool_Check(key)) {
+            v = PyObject_IsTrue(key);
         }
         else {
             return -1;
@@ -1053,17 +1066,15 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else if (PyNumber_Check(key)) {
-            Py_ssize_t temp;
-            temp = PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (PyErr_Occurred()) {
+        else if (PyLong_Check(key)) {
+            v = PyLong_AsUnsignedLongLong(key);
+            if (v == (npy_uint64)-1 && PyErr_Occurred()) {
                 PyErr_Clear();
                 return -1;
             }
-            if (temp < 0) {
-                return -1;
-            }
-            v = (npy_uint64)temp;
+        }
+        else if (PyBool_Check(key)) {
+            v = PyObject_IsTrue(key);
         }
         else {
             return -1;
@@ -1094,12 +1105,11 @@ lookup(FAMObject *self, PyObject *key) {
                 return -1;
             }
         }
-        else if (PyNumber_Check(key)) {
-            v = (double)PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
+        else if (PyLong_Check(key)) {
+
+        }
+        else if (PyBool_Check(key)) {
+            v = PyObject_IsTrue(key);
         }
         else {
             return -1;
