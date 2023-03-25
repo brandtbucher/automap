@@ -1092,21 +1092,33 @@ lookup(FAMObject *self, PyObject *key) {
     else if (self->keys_array_type >= KAT_FLOAT16
             && self->keys_array_type <= KAT_FLOAT64) {
         double v = 0;
-        if (PyArray_IsScalar(key, Double)) {
-            // PyArray_ScalarAsCtype(key, &v);
-            v = PyArrayScalar_VAL(key, Double);
+        if (PyArray_IsScalar(key, Byte)) {
+            v = (double)PyArrayScalar_VAL(key, Byte);
         }
-        else if (PyArray_IsScalar(key, Float)) {
-            // float temp;
-            // PyArray_ScalarAsCtype(key, &temp);
-            // v = (double)temp;
-            v = (double)PyArrayScalar_VAL(key, Float);
+        else if (PyArray_IsScalar(key, Short)) {
+            v = (double)PyArrayScalar_VAL(key, Short);
+        }
+        else if (PyArray_IsScalar(key, Int)) {
+            v = (double)PyArrayScalar_VAL(key, Int);
+        }
+        else if (PyArray_IsScalar(key, Long)) {
+            v = (double)PyArrayScalar_VAL(key, Long);
+        }
+        else if (PyArray_IsScalar(key, LongLong)) {
+            v = (double)PyArrayScalar_VAL(key, LongLong);
         }
         else if (PyArray_IsScalar(key, Half)) {
-            // npy_half temp;
+            // fprintf(stderr, "got half");
+            // double temp;
             // PyArray_ScalarAsCtype(key, &temp);
-            // v = (npy_half)temp;
+            // v = (double)temp;
             v = (double)PyArrayScalar_VAL(key, Half);
+        }
+        else if (PyArray_IsScalar(key, Float)) {
+            v = (double)PyArrayScalar_VAL(key, Float);
+        }
+        else if (PyArray_IsScalar(key, Double)) {
+            v = PyArrayScalar_VAL(key, Double);
         }
         else if (PyFloat_Check(key)) {
             v = PyFloat_AsDouble(key);

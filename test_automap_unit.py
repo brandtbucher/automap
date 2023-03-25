@@ -385,6 +385,29 @@ def test_fam_array_float_get_c():
     assert fam.get(a1[2]) == 2
 
 
+def test_fam_array_float_get_d():
+    a1 = np.array((8, 2, 4, 0, 1), dtype=np.float64)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    for ctype in (
+        np.int8,
+        np.int16,
+        np.int32,
+        np.int64,
+        # np.float16,
+        # np.float32,
+        np.float64,
+    ):
+        a2 = a1.astype(ctype)
+        for k in a2:
+            try:
+                assert k in fam
+            except:
+                import ipdb
+
+                ipdb.set_trace()
+
+
 # ------------------------------------------------------------------------------
 
 
