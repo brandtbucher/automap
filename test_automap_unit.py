@@ -400,13 +400,7 @@ def test_fam_array_float_get_d():
     ):
         a2 = a1.astype(ctype)
         for k in a2:
-            try:
-                assert k in fam
-            except:
-                import ipdb
-
-                ipdb.set_trace()
-
+            assert k in fam
 
 # ------------------------------------------------------------------------------
 
