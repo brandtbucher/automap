@@ -413,7 +413,7 @@ fami_iter(FAMIObject *self)
 }
 
 
-// For a FAMI, Return appropriate PyObject for items, keys, and values. When values are needed they are retrieved from the int_cache
+// For a FAMI, Return appropriate PyObject for items, keys, and values. When values are needed they are retrieved from the int_cache. For consistency with NumPy array iteration, arrays use PyArray_ToScalar instead of PyArray_GETITEM.
 static PyObject *
 fami_iternext(FAMIObject *self)
 {
@@ -436,8 +436,8 @@ fami_iternext(FAMIObject *self)
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
                 return PyTuple_Pack(
                     2,
-                    // PyArray_ToScalar(PyArray_GETPTR1(a, index), a),
-                    PyArray_GETITEM(a, PyArray_GETPTR1(a, index)),
+                    PyArray_ToScalar(PyArray_GETPTR1(a, index), a),
+                    // PyArray_GETITEM(a, PyArray_GETPTR1(a, index)),
                     self->int_cache_fi[index]
                 );
             }
@@ -452,8 +452,8 @@ fami_iternext(FAMIObject *self)
         case KEYS: {
             if (self->fam->keys_array_type) {
                 PyArrayObject *a = (PyArrayObject *)self->fam->keys;
-                // return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
-                return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
+                return PyArray_ToScalar(PyArray_GETPTR1(a, index), a);
+                // return PyArray_GETITEM(a, PyArray_GETPTR1(a, index));
             }
             else {
                 PyObject* yield = self->keys_fi[index];
