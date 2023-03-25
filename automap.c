@@ -704,8 +704,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     Py_hash_t mixin = Py_ABS(hash);
     Py_ssize_t table_pos = hash & mask;
 
-    PyObject **keys = NULL;
-    keys = PySequence_Fast_ITEMS(self->keys); // returns underlying array of PyObject pointers
+    PyObject **keys_fi = PySequence_Fast_ITEMS(self->keys);
     PyObject *guess = NULL;
     int result = -1;
     Py_hash_t h = 0;
@@ -720,12 +719,11 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
                 table_pos++;
                 continue;
             }
-            guess = keys[table[table_pos].keys_pos];
+            guess = keys_fi[table[table_pos].keys_pos];
             if (guess == key) { // Hit. Object ID comparison
                 return table_pos;
             }
             result = PyObject_RichCompareBool(guess, key, Py_EQ);
-
             if (result < 0) { // Error.
                 return -1;
             }
