@@ -7,7 +7,8 @@ For AutoMaps, the array is converted to a list of object (via `tolist()`) or Num
 
 General Changes
 
-
+Usag of PySequence_Fast_ITEMS where possible:
+    in fam_init for lists init
 
 
 

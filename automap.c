@@ -1472,12 +1472,12 @@ extend(FAMObject *self, PyObject *keys)
         return -1;
     }
 
-    PyObject **keys_array = PySequence_Fast_ITEMS(keys);
+    PyObject **keys_fi = PySequence_Fast_ITEMS(keys);
 
     for (Py_ssize_t index = 0; index < size_extend; index++) {
         // get the new keys_size after each append
-        if (insert(self, keys_array[index], PyList_GET_SIZE(self->keys), -1) ||
-            PyList_Append(self->keys, keys_array[index]))
+        if (insert(self, keys_fi[index], PyList_GET_SIZE(self->keys), -1) ||
+            PyList_Append(self->keys, keys_fi[index]))
         {
             Py_DECREF(keys);
             return -1;
@@ -1910,8 +1910,9 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
         }
     }
     else {
+        PyObject **keys_fi = PySequence_Fast_ITEMS(keys);
         for (; i < keys_size; i++) {
-            if (insert(fam, PyList_GET_ITEM(fam->keys, i), i, -1)) {
+            if (insert(fam, keys_fi[i], i, -1)) {
                 goto error;
             }
         }
