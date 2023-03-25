@@ -1,4 +1,19 @@
 
+These changes integrate direct support of NumPy arrays given as keys to AutoMaps and FrozenAutoMaps.
+
+For AutoMaps, the array is converted to a list of object (via `tolist()`) or NumPy scalars (via direct iteration), depending on dtype. Previously, to take advantage the better performance of `tolist()`, callers would have too convert their arrays to lists before passing that list to the AutoMap, wasting an intermediary list.
+
+
+
+General Changes
+
+
+
+
+
+
+
+
 At the core of every StaticFrame Index is an AutoMap (or the immutable FrozenAutoMap), a custom dictionary-like container implemented as a C-extension. This container meets the special needs of Index objects: given a sequence of hashable labels, permit obtaining their position with near constant-time performance. This can be done with standard dicts: given a sequence of hashables (seq) we could do the following: {k: v for v, k in enumerate(seq)}. This is inefficient, however, in that they values are always just contiguous integers; duplicating them for every dictionary is unnecessary. The first implementation optimized this aspect by using a shared cache of contiguous integers. In addition, that first implementation used a novel hash-table collision scanning approach to take advantage of contiguous memory. While this permited creating AutoMap's in about half the time as normal dicts, that performance was only available when starting with a list of Python objects. As every StaticFrame Index stores an immutable array of labels, converting that array to a list was costly and significantly reduced the performance advantage. Even more, the opportunity of just holding a reference to the immutable array was not taken, missing out on performance and memory savings. Over the past few weeks I have extended FrozenAutoMap to work directly with immutable arrays, holding on to them without copy, and using their C-types directly for hashing and lookup comparison. In most cases, particularly at scale, FrozenAutoMap, given an immutable array of non-object types, now outperforms any AutoMap created from a list. This offers a potentially significant general performance improvement throughout StaticFrame.
 
 
@@ -114,64 +129,7 @@ Code
 
 Next Steps
 
-    Low-bit unsigned ints not always passing lookup.
-
     Can we use datetime46 arrays directly?
-
-    Code reuse.
-
-
-
-Limitations:
-
-    Floats of less then 64 bit are sometimes not recoverable.
-
-    >>> import numpy as np
-    >>> a1 = np.array((2.3, 5.4), dtype=np.float32)
-    >>> d = {k: v for v, k in enumerate(a1)}
-    >>> d
-    {2.3: 0, 5.4: 1}
-    >>> d[5.4]
-    Traceback (most recent call last):
-      File "<stdin>", line 1, in <module>
-    KeyError: 5.4
-    >>> d[a1[1]]
-    1
-    >>> d[a1[0]]
-    0
-    >>> d[2.3]
-    Traceback (most recent call last):
-      File "<stdin>", line 1, in <module>
-    KeyError: 2.3
-
-    >>> from automap import AutoMap
-    >>> am = AutoMap(a1)
-    >>> am
-    automap.AutoMap([2.299999952316284, 5.400000095367432])
-    >>> am[a1[1]]
-    1
-    >>> am[a1[0]]
-    0
-
-
-Can try to use the following:
-
-https://numpy.org/doc/stable/reference/c-api/array.html#c.PyArray_ScalarAsCtype
-
-PyArray_ScalarAsCtype
-PyArray_CastScalarToCtype
-
-
-The C-names for these types are Py{TYPE}ArrType_Type where {TYPE} can be
-
-    Bool, Byte, Short, Int, Long, LongLong, UByte, UShort, UInt, ULong, ULongLong, Half, Float, Double, LongDouble, CFloat, CDouble, CLongDouble, String, Unicode, Void, and Object.
-
-
-These type names are part of the C-API and can therefore be created in extension C-code. There is also a PyIntpArrType_Type and a PyUIntpArrType_Type that are simple substitutes for one of the integer types that can hold a pointer on the platform. The structure of these scalar objects is not exposed to C-code. The function PyArray_ScalarAsCtype (..) can be used to extract the C-type value from the array scalar and the function PyArray_Scalar (…) can be used to construct an array scalar from a C-value.
-
-
-
-
 
 
 

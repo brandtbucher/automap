@@ -1334,7 +1334,6 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
         size_new <<= 1;
     }
     // size_new > keys_load; we know that keys_load >= size_old, so size_new must be > size_old
-
     TableElement *table_old = self->table;
     TableElement *table_new = PyMem_New(TableElement, size_new + SCAN - 1);
     if (!table_new) {
@@ -1352,31 +1351,29 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
 
     // if we have an old table, move them into the new table
     if (size_old) {
-
         if (self->keys_array_type) {
             PyErr_SetString(PyExc_NotImplementedError, "Cannot grow table for array keys");
-            return -1;
+            goto restore;
         }
 
         Py_ssize_t i;
         Py_hash_t h;
-
         for (table_pos = 0; table_pos < size_old + SCAN - 1; table_pos++) {
             i = table_old[table_pos].keys_pos;
             h = table_old[table_pos].hash;
-            // NOTE: cannot do this without segfault
-            // v = PyList_GET_ITEM(self->keys, i);
             if ((h != -1) && insert(self, PyList_GET_ITEM(self->keys, i), i, h))
             {
-                PyMem_Del(self->table);
-                self->table = table_old;
-                self->table_size = size_old;
-                return -1;
+                goto restore;
             }
         }
     }
     PyMem_Del(table_old);
     return 0;
+restore:
+    PyMem_Del(self->table);
+    self->table = table_old;
+    self->table_size = size_old;
+    return -1;
 }
 
 
