@@ -7,11 +7,25 @@ For AutoMaps, the array is converted to a list of object (via `tolist()`) or Num
 
 General Changes
 
-Usag of PySequence_Fast_ITEMS where possible:
-    in fam_init for lists init
-    in fami instances for keys adn int_cache acess
+More usage of PySequence_Fast_ITEMS where possible:
+    in `fam_init()` for initialization from lists
+    in `fami` structs for keys and int_cache access
+
+Split `fam_new()` into `fam_new()` and `fam_init()`, implemented `__setstate__()`, `__getstate__()`:
+    To support pickling a FAM with a NumPy array, `__setstate__()` must re-set the `writeable` flag to False.
+    To integrate `__setstate__()`, the old `fam_new()` had to be divided into a `fam_new()` and
+
+Split `copy()` into `copy()` and `copy_to_new()`.
+
+Extended property tests for FAMs with arrays
+    Tests initialization of both contiguous and non-contiguous arrays
+    Tests all features tested for non-array-based AMs
 
 
+
+TODO:
+iteration must return scalars
+alterantive scalar to C type with PyArrayScalar_VAL(e, Long)
 
 
 
