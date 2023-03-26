@@ -275,6 +275,28 @@ def test_fam_array_int_get_f2():
     assert fam.get(np.iinfo(ctype).max) == 1
 
 
+def test_fam_array_int_get_d():
+    a1 = np.array((8, 2, 4, 0, 1), dtype=np.int64)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    for ctype in (
+        np.int8,
+        np.int16,
+        np.int32,
+        np.int64,
+        np.uint8,
+        np.uint16,
+        np.uint32,
+        np.uint64,
+        # np.float16,
+        # np.float32,
+        # np.float64,
+    ):
+        a2 = a1.astype(ctype)
+        for k in a2:
+            assert k in fam, f"{type(k)}"
+
+
 # ------------------------------------------------------------------------------
 
 
@@ -401,6 +423,7 @@ def test_fam_array_float_get_d():
         a2 = a1.astype(ctype)
         for k in a2:
             assert k in fam
+
 
 # ------------------------------------------------------------------------------
 

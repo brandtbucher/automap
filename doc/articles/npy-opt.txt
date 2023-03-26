@@ -151,3 +151,18 @@ Next Steps
 
 
 
+
+
+// if (PyArray_IsScalar(key, Byte))
+// npy_byte temp;
+// PyArray_ScalarAsCtype(key, &temp);
+// v = (npy_int64)temp;
+
+
+
+else if (PyArray_IsScalar(key, Half)) {
+    // fprintf(stderr, "got half");
+    // double temp;
+    // PyArray_ScalarAsCtype(key, &temp);
+    // v = (double)temp;
+    v = (double)PyArrayScalar_VAL(key, Half);
