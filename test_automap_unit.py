@@ -295,6 +295,11 @@ def test_fam_array_int_get_d():
         a2 = a1.astype(ctype)
         for k in a2:
             assert k in fam, f"{type(k)}"
+    assert 2.0 in fam
+    assert 2.1 not in fam
+    assert True in fam
+    assert False in fam
+    assert 4 in fam
 
 
 # ------------------------------------------------------------------------------
@@ -369,6 +374,37 @@ def test_fam_array_uint_get_e():
         assert k in fam
 
 
+def test_fam_array_uint_get_f():
+    a1 = np.array((8, 2, 4, 1), dtype=np.uint64)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+    for ctype in (
+        np.int8,
+        np.int16,
+        np.int32,
+        np.int64,
+        np.uint8,
+        np.uint16,
+        np.uint32,
+        np.uint64,
+        np.float16,
+        np.float32,
+        np.float64,
+    ):
+        a2 = a1.astype(ctype)
+        for k in a2:
+            assert k in fam, f"{type(k)}"
+        a3 = -a2
+        for k in a3:
+            assert k not in fam, f"{type(k)}"
+
+    assert True in fam
+    assert 4.0 in fam
+    assert 4.1 not in fam
+    assert 8 in fam
+    assert -8 not in fam
+
+
 # ------------------------------------------------------------------------------
 
 
@@ -396,19 +432,24 @@ def test_fam_array_float_get_b():
     assert fam.get(a1[2]) == 2
 
 
-def test_fam_array_float_get_c():
+def test_fam_array_float_get_c1():
     a1 = np.array((1.5, 10.2, 8.8), dtype=np.float16)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
-
     assert fam.get("f") is None
     assert fam.get(a1[0]) == 0
     assert fam.get(a1[1]) == 1
     assert fam.get(a1[2]) == 2
 
 
+def test_fam_array_float_get_c2():
+    a1 = np.array((0.0,), dtype=np.float16)
+    a1.flags.writeable = False
+    fam = FrozenAutoMap(a1)
+
+
 def test_fam_array_float_get_d():
-    a1 = np.array((8, 2, 4, 0, 1), dtype=np.float64)
+    a1 = np.array((8, 2, 4, 1), dtype=np.float64)
     a1.flags.writeable = False
     fam = FrozenAutoMap(a1)
     for ctype in (
@@ -416,13 +457,26 @@ def test_fam_array_float_get_d():
         np.int16,
         np.int32,
         np.int64,
-        # np.float16,
-        # np.float32,
+        np.uint8,
+        np.uint16,
+        np.uint32,
+        np.uint64,
+        np.float16,
+        np.float32,
         np.float64,
     ):
         a2 = a1.astype(ctype)
         for k in a2:
-            assert k in fam
+            assert k in fam, f"{type(k)}"
+        a3 = -a2
+        for k in a3:
+            assert k not in fam, f"{type(k)}"
+
+    assert True in fam
+    assert 4.0 in fam
+    assert 4.1 not in fam
+    assert 8 in fam
+    assert -8 not in fam
 
 
 # ------------------------------------------------------------------------------
