@@ -22,6 +22,7 @@ class PayLoad:
         self.list = array.tolist()
         self.faml = FrozenAutoMap(self.list)
         self.fama = FrozenAutoMap(self.array)
+        self.ama = AutoMap(self.array)
         self.d = dict(zip(self.list, range(len(self.list))))
 
 
@@ -34,6 +35,7 @@ class MapProcessor:
         self.list = pl.list
         self.faml = pl.faml
         self.fama = pl.fama
+        self.ama = pl.ama
         self.d = pl.d
 
 
@@ -116,7 +118,7 @@ class DictLookup(MapProcessor):
 
 # -------------------------------------------------------------------------------
 class FAMLLookupScalar(MapProcessor):
-    NAME = "FAM(L): lookup AS"
+    NAME = "FAM(L): lookup scalar"
     SORT = 0
 
     def __call__(self):
@@ -126,7 +128,7 @@ class FAMLLookupScalar(MapProcessor):
 
 
 class FAMALookupScalar(MapProcessor):
-    NAME = "FAM(A): lookup AS"
+    NAME = "FAM(A): lookup scalar"
     SORT = 0
 
     def __call__(self):
@@ -134,9 +136,18 @@ class FAMALookupScalar(MapProcessor):
         for k in self.array:
             _ = m[k]
 
+class AMALookupScalar(MapProcessor):
+    NAME = "AM(A): lookup scalar"
+    SORT = 0
+
+    def __call__(self):
+        m = self.ama
+        for k in self.array:
+            _ = m[k]
+
 
 class DictLookupScalar(MapProcessor):
-    NAME = "Dict: lookup AS"
+    NAME = "Dict: lookup scalar"
     SORT = 0
 
     def __call__(self):
@@ -163,6 +174,16 @@ class FAMANotIn(MapProcessor):
     def __call__(self):
         m = self.fama
         for _ in self.list:
+            assert None not in m
+
+
+class AMANotIn(MapProcessor):
+    NAME = "AM(A): not in"
+    SORT = 0
+
+    def __call__(self):
+        m = self.ama
+        for _ in self.array:
             assert None not in m
 
 
@@ -366,40 +387,20 @@ def get_versions() -> str:
 
     return f"OS: {platform.system()} / AutoMap / NumPy: {np.__version__}\n"
 
-
-CLS_PROCESSOR = (
-    FAMLInstantiate,
-    FAMAInstantiate,
-    AMAInstantiate,
-    DictInstantiate,
-    FAMLLookup,
-    FAMALookup,
-    DictLookup,
-    FAMLLookupScalar,
-    FAMALookupScalar,
-    DictLookupScalar,
-    # FAMLNotIn,
-    # FAMANotIn,
-    # DictNotIn,
-    # FAMLKeys,
-    # FAMAKeys,
-    # DictKeys,
-)
-
 CLS_FF = (
-    # FFInt32,
+    FFInt32,
     FFInt64,
     FFUInt64,
     FFFloat64,
     FFString,
     FFString4x,
     FFBytes,
-    FFObject,
+    # FFObject,
 )
 FF_ORDER = [f.NAME for f in sorted(CLS_FF, key=lambda ff: ff.SORT)]
 
 # -------------------------------------------------------------------------------
-NUMBER = 50
+NUMBER = 5
 
 from itertools import product
 
@@ -413,7 +414,7 @@ def seconds_to_display(seconds: float) -> str:
     return f"{seconds: .1f} (s)"
 
 
-def plot_performance(frame):
+def plot_performance(frame, suffix: str = ''):
     fixture_total = len(frame["fixture"].unique())
     cat_total = len(frame["size"].unique())
     processor_total = len(frame["cls_processor"].unique())
@@ -470,10 +471,10 @@ def plot_performance(frame):
     fig.set_size_inches(9, 3)  # width, height
     fig.legend(post, names_display, loc="center right", fontsize=6)
     # horizontal, vertical
-    fig.text(0.05, 0.96, f"AutoMap Performance: {NUMBER} Iterations", fontsize=10)
+    fig.text(0.05, 0.96, f"AutoMap {suffix.title()}: {NUMBER} Iterations", fontsize=10)
     fig.text(0.05, 0.90, get_versions(), fontsize=6)
 
-    fp = "/tmp/automap.png"
+    fp = f"/tmp/automap-{suffix}.png"
     plt.subplots_adjust(
         left=0.075,
         bottom=0.05,
@@ -491,12 +492,12 @@ def plot_performance(frame):
         os.system(f"open {fp}")
 
 
-def run_test():
+def run_test(processors, suffix):
     records = []
-    for size in (100, 10_000, 1_000_000):
+    for size in (10_000, 100_000, 1_000_000):
         for ff in CLS_FF:
             fixture_label, fixture = ff.get_label_array(size)
-            for cls in CLS_PROCESSOR:
+            for cls in processors:
                 runner = cls(fixture)
 
                 record = [cls, NUMBER, fixture_label, size]
@@ -514,9 +515,47 @@ def run_test():
         records, columns=("cls_processor", "number", "fixture", "size", "time")
     )
     print(f)
-    plot_performance(f)
+    plot_performance(f, suffix)
 
 
 if __name__ == "__main__":
 
-    run_test()
+    CLS_PROCESSOR = (
+        FAMLInstantiate,
+        FAMAInstantiate,
+        AMAInstantiate,
+        DictInstantiate,
+        # FAMLLookup,
+        # FAMALookup,
+        # DictLookup,
+        # FAMLLookupScalar,
+        # FAMALookupScalar,
+        # DictLookupScalar,
+        # FAMLNotIn,
+        # FAMANotIn,
+        # DictNotIn,
+        # FAMLKeys,
+        # FAMAKeys,
+        # DictKeys,
+    )
+
+    cls_instantiate = (
+        FAMLInstantiate,
+        FAMAInstantiate,
+        AMAInstantiate,
+        DictInstantiate,
+    )
+
+    cls_lookup = (
+        FAMLLookupScalar,
+        FAMALookupScalar,
+        AMALookupScalar,
+        DictLookupScalar,
+        # FAMLNotIn,
+        # FAMANotIn,
+        # AMANotIn,
+        # DictNotIn,
+    )
+
+    run_test(cls_instantiate, 'instantiate')
+    run_test(cls_lookup, 'lookup')

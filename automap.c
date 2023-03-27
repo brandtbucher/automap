@@ -1352,7 +1352,6 @@ insert_uint(
         PyErr_SetObject(NonUniqueError, PyLong_FromSsize_t(key));
         return -1;
     }
-
     self->table[table_pos].keys_pos = keys_pos;
     self->table[table_pos].hash = hash;
     return 0;
