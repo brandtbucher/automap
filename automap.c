@@ -308,7 +308,7 @@ double_to_hash(double v)
 
 // This is a "djb2" hash algorithm.
 static inline Py_hash_t
-UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
+unicode_to_hash(Py_UCS4 *str, Py_ssize_t len) {
     Py_UCS4* p = str;
     Py_UCS4* p_end = str + len;
     Py_hash_t hash = 5381;
@@ -323,7 +323,7 @@ UCS4_to_hash(Py_UCS4 *str, Py_ssize_t len) {
 
 
 static inline Py_hash_t
-char_to_hash(char *str, Py_ssize_t len) {
+string_to_hash(char *str, Py_ssize_t len) {
     char* p = str;
     char* p_end = str + len;
     Py_hash_t hash = 5381;
@@ -800,10 +800,10 @@ lookup_hash_uint(FAMObject *self, npy_uint64 key, Py_hash_t hash)
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             h = table[table_pos].hash;
-            if (h == -1) { // Miss. Found a position that can be used for insertion.
+            if (h == -1) {
                 return table_pos;
             }
-            if (h != hash) { // Collision.
+            if (h != hash) {
                 table_pos++;
                 continue;
             }
@@ -823,7 +823,7 @@ lookup_hash_uint(FAMObject *self, npy_uint64 key, Py_hash_t hash)
                 default:
                     return -1;
             }
-            if (key == k) { // Hit.
+            if (key == k) {
                 return table_pos;
             }
             table_pos++;
@@ -901,16 +901,16 @@ lookup_hash_unicode(
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             h = table[table_pos].hash;
-            if (h == -1) { // Miss. Found a position that can be used for insertion.
+            if (h == -1) {
                 return table_pos;
             }
-            if (h != hash) { // Collision.
+            if (h != hash) {
                 table_pos++;
                 continue;
             }
             p_start = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
             // memcmp returns 0 on match
-            if (!memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size))) { // Hit.
+            if (!memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size))) {
                 return table_pos;
             }
             table_pos++;
@@ -941,16 +941,16 @@ lookup_hash_string(
     while (1) {
         for (Py_ssize_t i = 0; i < SCAN; i++) {
             h = table[table_pos].hash;
-            if (h == -1) { // Miss. Found a position that can be used for insertion.
+            if (h == -1) {
                 return table_pos;
             }
-            if (h != hash) { // Collision.
+            if (h != hash) {
                 table_pos++;
                 continue;
             }
             p_start = (char*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
             // memcmp returns 0 on match
-            if (!memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size))) { // Hit.
+            if (!memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size))) {
                 return table_pos;
             }
             table_pos++;
@@ -959,188 +959,187 @@ lookup_hash_string(
     }
 }
 
-// Given a key as a PyObject, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
+
 static Py_ssize_t
-lookup(FAMObject *self, PyObject *key) {
-    Py_ssize_t table_pos;
-
-    if (self->keys_array_type >= KAT_INT8
-            && self->keys_array_type <= KAT_INT64) {
-        npy_int64 v = 0;
-        // NOTE: we handle PyArray Scalar Byte, Short with PyNumber_Check, below, saving four branches here
-        if (PyArray_IsScalar(key, Int)) {
-            v = (npy_int64)PyArrayScalar_VAL(key, Int);
-        }
-        else if (PyArray_IsScalar(key, Long)) {
-            v = (npy_int64)PyArrayScalar_VAL(key, Long);
-        }
-        else if (PyArray_IsScalar(key, LongLong)) {
-            v = (npy_int64)PyArrayScalar_VAL(key, LongLong);
-        }
-        else if (PyArray_IsScalar(key, UInt)) {
-            v = (npy_int64)PyArrayScalar_VAL(key, UInt);
-        }
-        else if (PyArray_IsScalar(key, ULong)) {
-            v = (npy_int64)PyArrayScalar_VAL(key, ULong);
-        }
-        else if (PyArray_IsScalar(key, ULongLong)) {
-            v = (npy_int64)PyArrayScalar_VAL(key, ULongLong);
-        }
-        else if (PyArray_IsScalar(key, Half)) {
-            double dv = npy_half_to_double(PyArrayScalar_VAL(key, Half));
-            if (floor(dv) != dv) {
-                return -1;
-            }
-            v = (npy_int64)dv;
-        }
-        else if (PyArray_IsScalar(key, Float)) {
-            double dv = (double)PyArrayScalar_VAL(key, Float);
-            if (floor(dv) != dv) {
-                return -1;
-            }
-            v = (npy_int64)dv;
-        }
-        else if (PyArray_IsScalar(key, Double)) {
-            double dv = PyArrayScalar_VAL(key, Double);
-            if (floor(dv) != dv) {
-                return -1;
-            }
-            v = (npy_int64)dv;
-        }
-        else if (PyFloat_Check(key)) {
-            double dv = PyFloat_AsDouble(key);
-            if (dv == -1.0 && PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
-            v = (npy_int64)dv; // truncate to integer
-            if (v != dv) {
-                return -1;
-            }
-        }
-        else if (PyLong_Check(key)) {
-            v = PyLong_AsLongLong(key);
-            if (v == -1 && PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
-        }
-        else if (PyBool_Check(key)) {
-            v = PyObject_IsTrue(key);
-        }
-        else if (PyNumber_Check(key)) {
-            // NOTE: this returns a Py_ssize_t, which might be 32 bit. This can be used for PyArray_Scalars <= ssize_t.
-            v = (npy_int64)PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (v == -1 && PyErr_Occurred()) {
-                return -1;
-            }
-        }
-        else {
+lookup_int(FAMObject *self, PyObject* key) {
+    npy_int64 v = 0;
+    // NOTE: we handle PyArray Scalar Byte, Short with PyNumber_Check, below, saving four branches here
+    if (PyArray_IsScalar(key, Int)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, Int);
+    }
+    else if (PyArray_IsScalar(key, Long)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, Long);
+    }
+    else if (PyArray_IsScalar(key, LongLong)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, LongLong);
+    }
+    else if (PyArray_IsScalar(key, UInt)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, UInt);
+    }
+    else if (PyArray_IsScalar(key, ULong)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, ULong);
+    }
+    else if (PyArray_IsScalar(key, ULongLong)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, ULongLong);
+    }
+    else if (PyArray_IsScalar(key, Half)) {
+        double dv = npy_half_to_double(PyArrayScalar_VAL(key, Half));
+        if (floor(dv) != dv) {
             return -1;
         }
-        Py_hash_t hash = int_to_hash(v);
-        table_pos = lookup_hash_int(self, v, hash);
+        v = (npy_int64)dv;
     }
-    else if (self->keys_array_type >= KAT_UINT8
-            && self->keys_array_type <= KAT_UINT64) {
-        npy_uint64 v = 0;
-
-        // NOTE: we handle PyArray Scalar UByte, UShort with PyNumber_Check, below, saving four branches here
-        if (PyArray_IsScalar(key, Int)) {
-            npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, Int);
-            if (si < 0) {
-                return -1;
-            }
-            v = (npy_uint64)si;
-        }
-        else if (PyArray_IsScalar(key, Long)) {
-            npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, Long);
-            if (si < 0) {
-                return -1;
-            }
-            v = (npy_uint64)si;
-        }
-        else if (PyArray_IsScalar(key, LongLong)) {
-            npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, LongLong);
-            if (si < 0) {
-                return -1;
-            }
-            v = (npy_uint64)si;
-        }
-        else if (PyArray_IsScalar(key, UInt)) {
-            v = (npy_uint64)PyArrayScalar_VAL(key, UInt);
-        }
-        else if (PyArray_IsScalar(key, ULong)) {
-            v = (npy_uint64)PyArrayScalar_VAL(key, ULong);
-        }
-        else if (PyArray_IsScalar(key, ULongLong)) {
-            v = (npy_uint64)PyArrayScalar_VAL(key, ULongLong);
-        }
-        else if (PyArray_IsScalar(key, Half)) {
-            double dv = npy_half_to_double(PyArrayScalar_VAL(key, Half));
-            if (dv < 0 || floor(dv) != dv) {
-                return -1;
-            }
-            v = (npy_uint64)dv;
-        }
-        else if (PyArray_IsScalar(key, Float)) {
-            double dv = (double)PyArrayScalar_VAL(key, Float);
-            if (dv < 0 || floor(dv) != dv) {
-                return -1;
-            }
-            v = (npy_uint64)dv;
-        }
-        else if (PyArray_IsScalar(key, Double)) {
-            double dv = PyArrayScalar_VAL(key, Double);
-            if (dv < 0 || floor(dv) != dv) {
-                return -1;
-            }
-            v = (npy_uint64)dv;
-        }
-        else if (PyFloat_Check(key)) {
-            double dv = PyFloat_AsDouble(key);
-            if (dv == -1.0 && PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
-            if (dv < 0) {
-                return -1;
-            }
-            v = (npy_uint64)dv; // truncate to integer
-            if (v != dv) {
-                return -1;
-            }
-        }
-        else if (PyLong_Check(key)) {
-            v = PyLong_AsUnsignedLongLong(key);
-            if (v == (unsigned long long)-1 && PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
-        }
-        else if (PyBool_Check(key)) {
-            v = PyObject_IsTrue(key);
-        }
-        else if (PyNumber_Check(key)) {
-            // NOTE: this returns a Py_ssize_t, which might be 32 bit. This can be used for PyArray_Scalars <= ssize_t.
-            npy_int64 si = PyNumber_AsSsize_t(key, PyExc_OverflowError);
-            if (si == -1 && PyErr_Occurred()) {
-                PyErr_Clear();
-                return -1;
-            }
-            if (si < 0) {
-                return -1;
-            }
-            v = (npy_uint64)si;
-        }
-        else {
+    else if (PyArray_IsScalar(key, Float)) {
+        double dv = (double)PyArrayScalar_VAL(key, Float);
+        if (floor(dv) != dv) {
             return -1;
         }
-        Py_hash_t hash = uint_to_hash(v);
-        table_pos = lookup_hash_uint(self, v, hash);
+        v = (npy_int64)dv;
     }
-    else if (self->keys_array_type >= KAT_FLOAT16
-            && self->keys_array_type <= KAT_FLOAT64) {
+    else if (PyArray_IsScalar(key, Double)) {
+        double dv = PyArrayScalar_VAL(key, Double);
+        if (floor(dv) != dv) {
+            return -1;
+        }
+        v = (npy_int64)dv;
+    }
+    else if (PyFloat_Check(key)) {
+        double dv = PyFloat_AsDouble(key);
+        if (dv == -1.0 && PyErr_Occurred()) {
+            PyErr_Clear();
+            return -1;
+        }
+        v = (npy_int64)dv; // truncate to integer
+        if (v != dv) {
+            return -1;
+        }
+    }
+    else if (PyLong_Check(key)) {
+        v = PyLong_AsLongLong(key);
+        if (v == -1 && PyErr_Occurred()) {
+            PyErr_Clear();
+            return -1;
+        }
+    }
+    else if (PyBool_Check(key)) {
+        v = PyObject_IsTrue(key);
+    }
+    else if (PyNumber_Check(key)) {
+        // NOTE: this returns a Py_ssize_t, which might be 32 bit. This can be used for PyArray_Scalars <= ssize_t.
+        v = (npy_int64)PyNumber_AsSsize_t(key, PyExc_OverflowError);
+        if (v == -1 && PyErr_Occurred()) {
+            return -1;
+        }
+    }
+    else {
+        return -1;
+    }
+    Py_hash_t hash = int_to_hash(v);
+    return lookup_hash_int(self, v, hash);
+}
+
+
+static Py_ssize_t
+lookup_uint(FAMObject *self, PyObject* key) {
+    npy_uint64 v = 0;
+
+    // NOTE: we handle PyArray Scalar UByte, UShort with PyNumber_Check, below, saving four branches here
+    if (PyArray_IsScalar(key, Int)) {
+        npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, Int);
+        if (si < 0) {
+            return -1;
+        }
+        v = (npy_uint64)si;
+    }
+    else if (PyArray_IsScalar(key, Long)) {
+        npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, Long);
+        if (si < 0) {
+            return -1;
+        }
+        v = (npy_uint64)si;
+    }
+    else if (PyArray_IsScalar(key, LongLong)) {
+        npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, LongLong);
+        if (si < 0) {
+            return -1;
+        }
+        v = (npy_uint64)si;
+    }
+    else if (PyArray_IsScalar(key, UInt)) {
+        v = (npy_uint64)PyArrayScalar_VAL(key, UInt);
+    }
+    else if (PyArray_IsScalar(key, ULong)) {
+        v = (npy_uint64)PyArrayScalar_VAL(key, ULong);
+    }
+    else if (PyArray_IsScalar(key, ULongLong)) {
+        v = (npy_uint64)PyArrayScalar_VAL(key, ULongLong);
+    }
+    else if (PyArray_IsScalar(key, Half)) {
+        double dv = npy_half_to_double(PyArrayScalar_VAL(key, Half));
+        if (dv < 0 || floor(dv) != dv) {
+            return -1;
+        }
+        v = (npy_uint64)dv;
+    }
+    else if (PyArray_IsScalar(key, Float)) {
+        double dv = (double)PyArrayScalar_VAL(key, Float);
+        if (dv < 0 || floor(dv) != dv) {
+            return -1;
+        }
+        v = (npy_uint64)dv;
+    }
+    else if (PyArray_IsScalar(key, Double)) {
+        double dv = PyArrayScalar_VAL(key, Double);
+        if (dv < 0 || floor(dv) != dv) {
+            return -1;
+        }
+        v = (npy_uint64)dv;
+    }
+    else if (PyFloat_Check(key)) {
+        double dv = PyFloat_AsDouble(key);
+        if (dv == -1.0 && PyErr_Occurred()) {
+            PyErr_Clear();
+            return -1;
+        }
+        if (dv < 0) {
+            return -1;
+        }
+        v = (npy_uint64)dv; // truncate to integer
+        if (v != dv) {
+            return -1;
+        }
+    }
+    else if (PyLong_Check(key)) {
+        v = PyLong_AsUnsignedLongLong(key);
+        if (v == (unsigned long long)-1 && PyErr_Occurred()) {
+            PyErr_Clear();
+            return -1;
+        }
+    }
+    else if (PyBool_Check(key)) {
+        v = PyObject_IsTrue(key);
+    }
+    else if (PyNumber_Check(key)) {
+        // NOTE: this returns a Py_ssize_t, which might be 32 bit. This can be used for PyArray_Scalars <= ssize_t.
+        npy_int64 si = PyNumber_AsSsize_t(key, PyExc_OverflowError);
+        if (si == -1 && PyErr_Occurred()) {
+            PyErr_Clear();
+            return -1;
+        }
+        if (si < 0) {
+            return -1;
+        }
+        v = (npy_uint64)si;
+    }
+    else {
+        return -1;
+    }
+    Py_hash_t hash = uint_to_hash(v);
+    return lookup_hash_uint(self, v, hash);
+}
+
+static Py_ssize_t
+lookup_double(FAMObject *self, PyObject* key) {
         double v = 0;
         // NOTE: we handle PyArray Scalar Byte, Short with PyNumber_Check, below, saving four branches here
         if (PyArray_IsScalar(key, Int)) {
@@ -1201,40 +1200,71 @@ lookup(FAMObject *self, PyObject *key) {
             return -1;
         }
         Py_hash_t hash = double_to_hash(v);
-        table_pos = lookup_hash_double(self, v, hash);
+        return lookup_hash_double(self, v, hash);
+}
+
+
+static Py_ssize_t
+lookup_unicode(FAMObject *self, PyObject* key) {
+    // NOTE: while we can identify and use PyArray_IsScalar(key, Unicode), this did not improve performance and fails on Windows.
+    if (!PyUnicode_Check(key)) {
+        return -1;
+    }
+    PyArrayObject *a = (PyArrayObject *)self->keys;
+    Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
+    // if the key_size is greater than the dtype size of the array, we know there cannot be a match
+    Py_ssize_t k_size = PyUnicode_GetLength(key);
+    if (k_size > dt_size) {
+        return -1;
+    }
+    // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and still discover the lookup
+    if (!PyUnicode_AsUCS4(key, self->key_buffer, dt_size+1, 1)) {
+        return -1; // exception will be set
+    }
+    Py_hash_t hash = unicode_to_hash(self->key_buffer, k_size);
+    return lookup_hash_unicode(self, self->key_buffer, k_size, hash);
+}
+
+
+static Py_ssize_t
+lookup_string(FAMObject *self, PyObject* key) {
+    if (!PyBytes_Check(key)) {
+        return -1;
+    }
+    PyArrayObject *a = (PyArrayObject *)self->keys;
+    Py_ssize_t dt_size = PyArray_DESCR(a)->elsize;
+    Py_ssize_t k_size = PyBytes_GET_SIZE(key);
+    if (k_size > dt_size) {
+        return -1;
+    }
+    char* k = PyBytes_AS_STRING(key);
+    Py_hash_t hash = string_to_hash(k, k_size);
+    return lookup_hash_string(self, k, k_size, hash);
+}
+
+
+// Given a key as a PyObject, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
+static Py_ssize_t
+lookup(FAMObject *self, PyObject *key) {
+    Py_ssize_t table_pos;
+
+    if (self->keys_array_type >= KAT_INT8
+            && self->keys_array_type <= KAT_INT64) {
+        table_pos = lookup_int(self, key);
+    }
+    else if (self->keys_array_type >= KAT_UINT8
+            && self->keys_array_type <= KAT_UINT64) {
+        table_pos = lookup_uint(self, key);
+    }
+    else if (self->keys_array_type >= KAT_FLOAT16
+            && self->keys_array_type <= KAT_FLOAT64) {
+        table_pos = lookup_double(self, key);
     }
     else if (self->keys_array_type == KAT_UNICODE) {
-        // NOTE: while we can identify and use PyArray_IsScalar(key, Unicode), this did not improve performance and fails on Windows.
-        if (!PyUnicode_Check(key)) {
-            return -1;
-        }
-        PyArrayObject *a = (PyArrayObject *)self->keys;
-        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize / sizeof(Py_UCS4);
-        // if the key_size is greater than the dtype size of the array, we know there cannot be a match
-        Py_ssize_t k_size = PyUnicode_GetLength(key);
-        if (k_size > dt_size) {
-            return -1;
-        }
-        // The buffer will have dt_size + 1 storage. We copy a NULL character so do not have to clear the buffer, but instead can reuse it and still discover the lookup
-        if (!PyUnicode_AsUCS4(key, self->key_buffer, dt_size+1, 1)) {
-            return -1; // exception will be set
-        }
-        Py_hash_t hash = UCS4_to_hash(self->key_buffer, k_size);
-        table_pos = lookup_hash_unicode(self, self->key_buffer, k_size, hash);
+        table_pos = lookup_unicode(self, key);
     }
     else if (self->keys_array_type == KAT_STRING) {
-        if (!PyBytes_Check(key)) {
-            return -1;
-        }
-        PyArrayObject *a = (PyArrayObject *)self->keys;
-        Py_ssize_t dt_size = PyArray_DESCR(a)->elsize;
-        Py_ssize_t k_size = PyBytes_GET_SIZE(key);
-        if (k_size > dt_size) {
-            return -1;
-        }
-        char* k = PyBytes_AS_STRING(key);
-        Py_hash_t hash = char_to_hash(k, k_size);
-        table_pos = lookup_hash_string(self, k, k_size, hash);
+        table_pos = lookup_string(self, key);
     }
     else {
         Py_hash_t hash = PyObject_Hash(key);
@@ -1243,7 +1273,6 @@ lookup(FAMObject *self, PyObject *key) {
         }
         table_pos = lookup_hash(self, key, hash);
     }
-
     // A -1 hash at this table position means that we found an unused storage location
     if ((table_pos < 0) || (self->table[table_pos].hash == -1)) {
         return -1;
@@ -1365,7 +1394,7 @@ insert_unicode(
         Py_hash_t hash)
 {
     if (hash == -1) {
-        hash = UCS4_to_hash(key, key_size);
+        hash = unicode_to_hash(key, key_size);
     }
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos = lookup_hash_unicode(self, key, key_size, hash);
@@ -1392,7 +1421,7 @@ insert_string(
         Py_hash_t hash)
 {
     if (hash == -1) {
-        hash = char_to_hash(key, key_size);
+        hash = string_to_hash(key, key_size);
     }
     // table position is not dependent on keys_pos
     Py_ssize_t table_pos = lookup_hash_string(self, key, key_size, hash);

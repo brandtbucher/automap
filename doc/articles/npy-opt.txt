@@ -12,21 +12,20 @@ More usage of PySequence_Fast_ITEMS where possible:
     in `fami` structs for keys and int_cache access
 
 Split `fam_new()` into `fam_new()` and `fam_init()`, implemented `__setstate__()`, `__getstate__()`:
-    To support pickling a FAM with a NumPy array, `__setstate__()` must re-set the `writeable` flag to False.
+    To support pickling a FAM with a NumPy array, `__setstate__()` must re-set the `writeable` flag of ararys to False.
     To integrate `__setstate__()`, the old `fam_new()` had to be divided into a `fam_new()` and
 
 Split `copy()` into `copy()` and `copy_to_new()`.
+
+
+Additions to the `fam` struct:
+    Added `key_buffer`: For Unicode arrays, this is a dynamically allocated buffer of size equal to one more than the array's max number of characters. This buffer is given to `PyUnicode_AsUCS4`, which will add a NULL and is why the size of the buffer is one more than max characters. This is only used for a FAM with Unicode array keys; all other usage keeps this as NULL.
 
 Extended property tests for FAMs with arrays
     Tests initialization of both contiguous and non-contiguous arrays
     Tests all features tested for non-array-based AMs
 
 The type of `key_count_global` is now a platform independent 64 bit signed integer. Perviously, it was a `Py_ssize_t`, which is 32 bits on 32 bit systems and could overflow in scenarios when many indicies are created.
-
-
-
-TODO:
-alterantive scalar to C type with PyArrayScalar_VAL(e, Long)
 
 
 
