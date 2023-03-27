@@ -117,6 +117,7 @@ really gives us our awesome performance.
 
 # include "numpy/arrayobject.h"
 # include "numpy/arrayscalars.h"
+# include "numpy/halffloat.h"
 
 # define DEBUG_MSG_OBJ(msg, obj)      \
     fprintf(stderr, "--- %s: %i: %s: ", __FILE__, __LINE__, __FUNCTION__); \
@@ -694,7 +695,7 @@ famv_new(FAMObject *fam, int kind)
 //------------------------------------------------------------------------------
 // FrozenAutoMap functions
 
-// Given a key and a computed hash, return the table_pos if that hash and key are found. Return -1 on error.
+// Given a key and a computed hash, return the table_pos if that hash and key are found, or if not, the first table position that has not been assigned. Return -1 on error.
 static Py_ssize_t
 lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
 {
@@ -735,7 +736,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     }
 }
 
-// For these integers, the key is used as the hash.
+
 static Py_ssize_t
 lookup_hash_int(FAMObject *self, npy_int64 key, Py_hash_t hash)
 {
@@ -774,6 +775,7 @@ lookup_hash_int(FAMObject *self, npy_int64 key, Py_hash_t hash)
                 default:
                     return -1;
             }
+            // fprintf(stderr, "key: %d k: %d\n", (int)key, (int)k);
             if (key == k) {
                 return table_pos;
             }
@@ -991,9 +993,15 @@ lookup(FAMObject *self, PyObject *key) {
         else if (PyArray_IsScalar(key, ULongLong)) {
             v = (npy_int64)PyArrayScalar_VAL(key, ULongLong);
         }
-        // else if (PyArray_IsScalar(key, Half)) {
-        //     v = (npy_int64)PyArrayScalar_VAL(key, Half);
-        // }
+        else if (PyArray_IsScalar(key, Half)) {
+            v = (npy_int64)npy_half_to_double(PyArrayScalar_VAL(key, Half));
+        }
+        else if (PyArray_IsScalar(key, Float)) {
+            v = (npy_int64)PyArrayScalar_VAL(key, Float);
+        }
+        else if (PyArray_IsScalar(key, Double)) {
+            v = (npy_int64)PyArrayScalar_VAL(key, Double);
+        }
         else if (PyFloat_Check(key)) {
             double dv = PyFloat_AsDouble(key);
             if (PyErr_Occurred()) {

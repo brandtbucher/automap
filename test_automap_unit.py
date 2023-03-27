@@ -288,9 +288,9 @@ def test_fam_array_int_get_d():
         np.uint16,
         np.uint32,
         np.uint64,
-        # np.float16,
-        # np.float32,
-        # np.float64,
+        np.float16,
+        np.float32,
+        np.float64,
     ):
         a2 = a1.astype(ctype)
         for k in a2:
