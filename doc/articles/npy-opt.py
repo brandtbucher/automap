@@ -402,7 +402,7 @@ CLS_FF = (
 FF_ORDER = [f.NAME for f in sorted(CLS_FF, key=lambda ff: ff.SORT)]
 
 # -------------------------------------------------------------------------------
-NUMBER = 5
+NUMBER = 10
 
 from itertools import product
 

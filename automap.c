@@ -265,9 +265,10 @@ int_to_hash(npy_int64 v) {
     return hash;
 }
 
+// This is a adapted from https://github.com/python/cpython/blob/ba65a065cf07a7a9f53be61057a090f7311a5ad7/Python/pyhash.c#L92
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
 #define HASH_BITS 61
-Py_hash_t
+static inline Py_hash_t
 double_to_hash(double v)
 {
     int e, sign;
@@ -966,38 +967,19 @@ lookup_hash_string(
 static Py_ssize_t
 lookup_int(FAMObject *self, PyObject* key) {
     npy_int64 v = 0;
-    // NOTE: we handle PyArray Scalar Byte, Short with PyNumber_Check, below, saving four branches here
-    if (PyArray_IsScalar(key, Int)) {
-        v = (npy_int64)PyArrayScalar_VAL(key, Int);
+    // NOTE: we handle PyArray Scalar Byte, Short, UByte, UShort with PyNumber_Check, below, saving four branches here
+    if (PyArray_IsScalar(key, LongLong)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, LongLong);
     }
     else if (PyArray_IsScalar(key, Long)) {
         v = (npy_int64)PyArrayScalar_VAL(key, Long);
     }
-    else if (PyArray_IsScalar(key, LongLong)) {
-        v = (npy_int64)PyArrayScalar_VAL(key, LongLong);
-    }
-    else if (PyArray_IsScalar(key, UInt)) {
-        v = (npy_int64)PyArrayScalar_VAL(key, UInt);
-    }
-    else if (PyArray_IsScalar(key, ULong)) {
-        v = (npy_int64)PyArrayScalar_VAL(key, ULong);
-    }
-    else if (PyArray_IsScalar(key, ULongLong)) {
-        v = (npy_int64)PyArrayScalar_VAL(key, ULongLong);
-    }
-    else if (PyArray_IsScalar(key, Half)) {
-        double dv = npy_half_to_double(PyArrayScalar_VAL(key, Half));
-        if (floor(dv) != dv) {
+    else if (PyLong_Check(key)) {
+        v = PyLong_AsLongLong(key);
+        if (v == -1 && PyErr_Occurred()) {
+            PyErr_Clear();
             return -1;
         }
-        v = (npy_int64)dv;
-    }
-    else if (PyArray_IsScalar(key, Float)) {
-        double dv = (double)PyArrayScalar_VAL(key, Float);
-        if (floor(dv) != dv) {
-            return -1;
-        }
-        v = (npy_int64)dv;
     }
     else if (PyArray_IsScalar(key, Double)) {
         double dv = PyArrayScalar_VAL(key, Double);
@@ -1017,12 +999,31 @@ lookup_int(FAMObject *self, PyObject* key) {
             return -1;
         }
     }
-    else if (PyLong_Check(key)) {
-        v = PyLong_AsLongLong(key);
-        if (v == -1 && PyErr_Occurred()) {
-            PyErr_Clear();
+    else if (PyArray_IsScalar(key, ULongLong)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, ULongLong);
+    }
+    else if (PyArray_IsScalar(key, ULong)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, ULong);
+    }
+    else if (PyArray_IsScalar(key, Int)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, Int);
+    }
+    else if (PyArray_IsScalar(key, UInt)) {
+        v = (npy_int64)PyArrayScalar_VAL(key, UInt);
+    }
+    else if (PyArray_IsScalar(key, Float)) {
+        double dv = (double)PyArrayScalar_VAL(key, Float);
+        if (floor(dv) != dv) {
             return -1;
         }
+        v = (npy_int64)dv;
+    }
+    else if (PyArray_IsScalar(key, Half)) {
+        double dv = npy_half_to_double(PyArrayScalar_VAL(key, Half));
+        if (floor(dv) != dv) {
+            return -1;
+        }
+        v = (npy_int64)dv;
     }
     else if (PyBool_Check(key)) {
         v = PyObject_IsTrue(key);
@@ -1046,9 +1047,15 @@ static Py_ssize_t
 lookup_uint(FAMObject *self, PyObject* key) {
     npy_uint64 v = 0;
 
-    // NOTE: we handle PyArray Scalar UByte, UShort with PyNumber_Check, below, saving four branches here
-    if (PyArray_IsScalar(key, Int)) {
-        npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, Int);
+    // NOTE: we handle PyArray Scalar Byte, Short, UByte, UShort with PyNumber_Check, below, saving four branches here
+    if (PyArray_IsScalar(key, ULongLong)) {
+        v = (npy_uint64)PyArrayScalar_VAL(key, ULongLong);
+    }
+    else if (PyArray_IsScalar(key, ULong)) {
+        v = (npy_uint64)PyArrayScalar_VAL(key, ULong);
+    }
+    else if (PyArray_IsScalar(key, LongLong)) {
+        npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, LongLong);
         if (si < 0) {
             return -1;
         }
@@ -1061,35 +1068,12 @@ lookup_uint(FAMObject *self, PyObject* key) {
         }
         v = (npy_uint64)si;
     }
-    else if (PyArray_IsScalar(key, LongLong)) {
-        npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, LongLong);
-        if (si < 0) {
+    else if (PyLong_Check(key)) {
+        v = PyLong_AsUnsignedLongLong(key);
+        if (v == (unsigned long long)-1 && PyErr_Occurred()) {
+            PyErr_Clear();
             return -1;
         }
-        v = (npy_uint64)si;
-    }
-    else if (PyArray_IsScalar(key, UInt)) {
-        v = (npy_uint64)PyArrayScalar_VAL(key, UInt);
-    }
-    else if (PyArray_IsScalar(key, ULong)) {
-        v = (npy_uint64)PyArrayScalar_VAL(key, ULong);
-    }
-    else if (PyArray_IsScalar(key, ULongLong)) {
-        v = (npy_uint64)PyArrayScalar_VAL(key, ULongLong);
-    }
-    else if (PyArray_IsScalar(key, Half)) {
-        double dv = npy_half_to_double(PyArrayScalar_VAL(key, Half));
-        if (dv < 0 || floor(dv) != dv) {
-            return -1;
-        }
-        v = (npy_uint64)dv;
-    }
-    else if (PyArray_IsScalar(key, Float)) {
-        double dv = (double)PyArrayScalar_VAL(key, Float);
-        if (dv < 0 || floor(dv) != dv) {
-            return -1;
-        }
-        v = (npy_uint64)dv;
     }
     else if (PyArray_IsScalar(key, Double)) {
         double dv = PyArrayScalar_VAL(key, Double);
@@ -1112,12 +1096,29 @@ lookup_uint(FAMObject *self, PyObject* key) {
             return -1;
         }
     }
-    else if (PyLong_Check(key)) {
-        v = PyLong_AsUnsignedLongLong(key);
-        if (v == (unsigned long long)-1 && PyErr_Occurred()) {
-            PyErr_Clear();
+    else if (PyArray_IsScalar(key, Int)) {
+        npy_int64 si = (npy_int64)PyArrayScalar_VAL(key, Int);
+        if (si < 0) {
             return -1;
         }
+        v = (npy_uint64)si;
+    }
+    else if (PyArray_IsScalar(key, UInt)) {
+        v = (npy_uint64)PyArrayScalar_VAL(key, UInt);
+    }
+    else if (PyArray_IsScalar(key, Float)) {
+        double dv = (double)PyArrayScalar_VAL(key, Float);
+        if (dv < 0 || floor(dv) != dv) {
+            return -1;
+        }
+        v = (npy_uint64)dv;
+    }
+    else if (PyArray_IsScalar(key, Half)) {
+        double dv = npy_half_to_double(PyArrayScalar_VAL(key, Half));
+        if (dv < 0 || floor(dv) != dv) {
+            return -1;
+        }
+        v = (npy_uint64)dv;
     }
     else if (PyBool_Check(key)) {
         v = PyObject_IsTrue(key);
@@ -1140,6 +1141,7 @@ lookup_uint(FAMObject *self, PyObject* key) {
     Py_hash_t hash = uint_to_hash(v);
     return lookup_hash_uint(self, v, hash);
 }
+
 
 static Py_ssize_t
 lookup_double(FAMObject *self, PyObject* key) {
@@ -1511,7 +1513,7 @@ restore:
 }
 
 
-// Given a new, possibly un-initialized FAMObject, copy attrs from self to new. Note that if fam_init calls this, it will only do this routine. Return 0 on success, -1 on error.
+// Given a new, possibly un-initialized FAMObject, copy attrs from self to new. Return 0 on success, -1 on error.
 int
 copy_to_new(PyTypeObject *cls, FAMObject *self, FAMObject *new)
 {
@@ -1553,7 +1555,7 @@ static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs);
 
 
-// Create a copy of self. Returns NULL on error.
+// Create a copy of self. Used in `fam_or()`. Returns a new FAMObject on success, NULL on error.
 static FAMObject *
 copy(PyTypeObject *cls, FAMObject *self)
 {
@@ -1830,32 +1832,32 @@ fam_values(FAMObject *self)
 }
 
 
-// This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`.
-# define INSERT_SCALARS(npy_type, insert_func, pre_insert) \
-if (contiguous) {                                       \
-    npy_type* b = (npy_type*)PyArray_DATA(a);           \
-    npy_type* b_end = b + keys_size;                    \
-    while (b < b_end) {                                 \
-        if (insert_func(fam, pre_insert(*b), i, -1)) {  \
-            goto error;                                 \
-        }                                               \
-        b++;                                            \
-        i++;                                            \
-    }                                                   \
-}                                                       \
-else {                                                  \
-    for (; i < keys_size; i++) {                        \
-        if (insert_func(fam,                            \
-                pre_insert(*(npy_type*)PyArray_GETPTR1(a, i)), \
-                i,                                      \
-                -1)) {                                  \
-            goto error;                                 \
-        }                                               \
-    }                                                   \
-}                                                       \
+// This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`. An optional `pre_insert` function can be supplied to transform extracted values before calling the insert function.
+# define INSERT_SCALARS(npy_type, insert_func, pre_insert)    \
+if (contiguous) {                                             \
+    npy_type* b = (npy_type*)PyArray_DATA(a);                 \
+    npy_type* b_end = b + keys_size;                          \
+    while (b < b_end) {                                       \
+        if (insert_func(fam, pre_insert(*b), i, -1)) {        \
+            goto error;                                       \
+        }                                                     \
+        b++;                                                  \
+        i++;                                                  \
+    }                                                         \
+}                                                             \
+else {                                                        \
+    for (; i < keys_size; i++) {                              \
+        if (insert_func(fam,                                  \
+                pre_insert(*(npy_type*)PyArray_GETPTR1(a, i)),\
+                i,                                            \
+                -1)) {                                        \
+            goto error;                                       \
+        }                                                     \
+    }                                                         \
+}                                                             \
 
 
-// This macro is for inserting flexible-sized types, Unicode (Py_UCS4) or strings (char).  Uses context of `fam_init`.
+// This macro is for inserting flexible-sized types, Unicode (Py_UCS4) or strings (char). Uses context of `fam_init`.
 # define INSERT_FLEXIBLE(char_type, insert_func, get_end_func) \
 char_type* p = NULL;                                           \
 if (contiguous) {                                              \
@@ -1883,8 +1885,7 @@ else {                                                         \
 static PyObject *
 fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
-    // NOTE: original fam_new used to be able to provide a same reference back if a fam was in the args; this is tricky now that we have fam_init
-
+    // NOTE: The original fam_new used to be able to provide a same reference back if a fam was in the args; this is tricky now that we have fam_init
     FAMObject *self = (FAMObject *)cls->tp_alloc(cls, 0);
     if (!self) {
         return NULL;
@@ -1911,9 +1912,11 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
         return -1;
     }
 
-    int keys_array_type = KAT_LIST;
+    int keys_array_type = KAT_LIST; // default, will override if necessary
 
     PyObject *keys = NULL;
+    Py_ssize_t keys_size = 0;
+
     if (!PyArg_UnpackTuple(args, name, 0, 1, &keys)) {
         return -1;
     }
@@ -1933,18 +1936,15 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
         }
         int array_t = PyArray_TYPE(a);
         if (cls != &AMType &&
-                (PyTypeNum_ISSIGNED(array_t)
-                || PyTypeNum_ISUNSIGNED(array_t)
+                (PyTypeNum_ISINTEGER(array_t) // signed and unsigned
                 || PyTypeNum_ISFLOAT(array_t)
-                || array_t == NPY_UNICODE
-                || array_t == NPY_STRING)
+                || PyTypeNum_ISFLEXIBLE(array_t))
             ){
             if ((PyArray_FLAGS(a) & NPY_ARRAY_WRITEABLE)) {
                 PyErr_Format(PyExc_TypeError, "Arrays must be immutable when given to a %s", name);
                 return -1;
             }
             keys_array_type = at_to_kat(array_t);
-            assert(keys_array_type); // must be truthy
             Py_INCREF(keys);
         }
         else { // if an AutoMap or an array that we do not custom-hash, we create a list
@@ -1955,9 +1955,11 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
                 keys = PyArray_ToList(a); // converts to objs
             }
         }
+        keys_size = PyArray_SIZE(a);
     }
     else { // assume an arbitrary iterable
         keys = PySequence_List(keys);
+        keys_size = PyList_GET_SIZE(keys);
     }
 
     if (!keys) {
@@ -1966,10 +1968,6 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
 
     fam->keys = keys;
     fam->keys_array_type = keys_array_type;
-
-    Py_ssize_t keys_size = keys_array_type
-        ? PyArray_SIZE((PyArrayObject *)keys)
-        : PyList_GET_SIZE(keys);
     fam->keys_size = keys_size;
     fam->key_buffer = NULL;
     key_count_global += keys_size;
@@ -2015,7 +2013,6 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
                 INSERT_SCALARS(npy_float, insert_double,);
                 break;
             case KAT_FLOAT16:
-                // conversion to double requires special handling
                 INSERT_SCALARS(npy_half, insert_double, npy_half_to_double);
                 break;
             case KAT_UNICODE: {
@@ -2026,7 +2023,6 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
                 break;
             }
             case KAT_STRING: {
-                // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
                 Py_ssize_t dt_size = PyArray_DESCR(a)->elsize;
                 INSERT_FLEXIBLE(char, insert_string, char_get_end_p);
                 break;
