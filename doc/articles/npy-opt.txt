@@ -1,7 +1,12 @@
 
-These changes integrate direct support of NumPy arrays given as keys to AutoMaps and FrozenAutoMaps. Opertion with non-array keys, hash table usage and scanning, and usage of a PyObject integer cache, reamins unchanged.
+These changes integrate direct support of NumPy arrays given as keys to `AutoMap`s and `FrozenAutoMap`s. Improvements are made in `AutoMap` initialization, whereby an array is converted to a list using specialized array methods (`tolist()`) when necessary. Improvements are made in `FrozenAutoMap` initialization, whereby an immutable array, when given as keys, is held as a reference without copy to a list; further, hashing and lookup make use of C types, avoiding any creation of PyObjects.
 
-For AutoMaps, the array is converted to a list of object (via `tolist()`) or NumPy scalars (via direct iteration), depending on dtype. Previously, to take advantage the better performance of `tolist()`, callers would have too convert their arrays to lists before passing that list to the AutoMap, wasting an intermediary list.
+Operation with non-array keys, hash table usage and scanning, and usage of the PyObject integer cache, remains unchanged.
+
+On initialization (`fam_init`), a `KeysArrayType` enum value is assigned to the `keys_array_type` attribute of `FAMObject`. This is used for branching in all places where divergent behavior is required between keys stored as lists (as was done previously) or as keys stored as typed arrays.
+
+
+All `FrozenAutoMap` usage of arrays reduces memory usage: no new `PyObject`s are created.
 
 
 

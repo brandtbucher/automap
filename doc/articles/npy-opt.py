@@ -136,6 +136,7 @@ class FAMALookupScalar(MapProcessor):
         for k in self.array:
             _ = m[k]
 
+
 class AMALookupScalar(MapProcessor):
     NAME = "AM(A): lookup scalar"
     SORT = 0
@@ -387,6 +388,7 @@ def get_versions() -> str:
 
     return f"OS: {platform.system()} / AutoMap / NumPy: {np.__version__}\n"
 
+
 CLS_FF = (
     FFInt32,
     FFInt64,
@@ -414,7 +416,7 @@ def seconds_to_display(seconds: float) -> str:
     return f"{seconds: .1f} (s)"
 
 
-def plot_performance(frame, suffix: str = ''):
+def plot_performance(frame, suffix: str = ""):
     fixture_total = len(frame["fixture"].unique())
     cat_total = len(frame["size"].unique())
     processor_total = len(frame["cls_processor"].unique())
@@ -557,5 +559,5 @@ if __name__ == "__main__":
         # DictNotIn,
     )
 
-    run_test(cls_instantiate, 'instantiate')
-    run_test(cls_lookup, 'lookup')
+    run_test(cls_instantiate, "instantiate")
+    run_test(cls_lookup, "lookup")

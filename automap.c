@@ -641,6 +641,7 @@ famv_isdisjoint(FAMVObject *self, PyObject *other)
     return PyBool_FromLong(result);
 }
 
+
 static PyObject *
 famv_richcompare(FAMVObject *self, PyObject *other, int op)
 {
@@ -659,12 +660,14 @@ famv_richcompare(FAMVObject *self, PyObject *other, int op)
     return result;
 }
 
+
 static PyMethodDef famv_methods[] = {
     {"__length_hint__", (PyCFunction) famv___length_hint__, METH_NOARGS, NULL},
     {"__reversed__", (PyCFunction) famv___reversed__, METH_NOARGS, NULL},
     {"isdisjoint", (PyCFunction) famv_isdisjoint, METH_O, NULL},
     {NULL},
 };
+
 
 static PyTypeObject FAMVType = {
     PyVarObject_HEAD_INIT(NULL, 0)
@@ -1160,7 +1163,6 @@ lookup_double(FAMObject *self, PyObject* key) {
         else if (PyArray_IsScalar(key, ULongLong)) {
             v = (double)PyArrayScalar_VAL(key, ULongLong);
         }
-
         else if (PyArray_IsScalar(key, Half)) {
             v = npy_half_to_double(PyArrayScalar_VAL(key, Half));
         }
@@ -1246,34 +1248,42 @@ lookup_string(FAMObject *self, PyObject* key) {
 // Given a key as a PyObject, return the Py_ssize_t keys_pos value stored in the TableElement. Return -1 on key not found (without setting an exception) and -1 on error (with setting an exception).
 static Py_ssize_t
 lookup(FAMObject *self, PyObject *key) {
-    Py_ssize_t table_pos;
+    Py_ssize_t table_pos = -1;
 
-    if (self->keys_array_type >= KAT_INT8
-            && self->keys_array_type <= KAT_INT64) {
-        table_pos = lookup_int(self, key);
-    }
-    else if (self->keys_array_type >= KAT_UINT8
-            && self->keys_array_type <= KAT_UINT64) {
-        table_pos = lookup_uint(self, key);
-    }
-    else if (self->keys_array_type >= KAT_FLOAT16
-            && self->keys_array_type <= KAT_FLOAT64) {
-        table_pos = lookup_double(self, key);
-    }
-    else if (self->keys_array_type == KAT_UNICODE) {
-        table_pos = lookup_unicode(self, key);
-    }
-    else if (self->keys_array_type == KAT_STRING) {
-        table_pos = lookup_string(self, key);
-    }
-    else {
-        Py_hash_t hash = PyObject_Hash(key);
-        if (hash == -1) {
-            return -1;
+    switch (self->keys_array_type) {
+        case KAT_INT64:
+        case KAT_INT32:
+        case KAT_INT16:
+        case KAT_INT8:
+            table_pos = lookup_int(self, key);
+            break;
+        case KAT_UINT64:
+        case KAT_UINT32:
+        case KAT_UINT16:
+        case KAT_UINT8:
+            table_pos = lookup_uint(self, key);
+            break;
+        case KAT_FLOAT64:
+        case KAT_FLOAT32:
+        case KAT_FLOAT16:
+            table_pos = lookup_double(self, key);
+            break;
+        case KAT_UNICODE:
+            table_pos = lookup_unicode(self, key);
+            break;
+        case KAT_STRING:
+            table_pos = lookup_string(self, key);
+            break;
+        case KAT_LIST: {
+            Py_hash_t hash = PyObject_Hash(key);
+            if (hash == -1) {
+                return -1;
+            }
+            table_pos = lookup_hash(self, key, hash);
+            break;
         }
-        table_pos = lookup_hash(self, key, hash);
     }
-    // A -1 hash at this table position means that we found an unused storage location
+    // A -1 hash is an unused storage location
     if ((table_pos < 0) || (self->table[table_pos].hash == -1)) {
         return -1;
     }
