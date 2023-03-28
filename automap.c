@@ -137,7 +137,7 @@ static PyObject *NonUniqueError;
 
 
 // The main storage "table" is an array of TableElement
-typedef struct {
+typedef struct TableElement{
     Py_ssize_t keys_pos;
     Py_hash_t hash;
 } TableElement;
@@ -148,7 +148,7 @@ typedef struct {
 # define SCAN 16
 
 
-typedef enum {
+typedef enum KeysArrayType{
     KAT_LIST = 0, // must be falsy
 
     KAT_INT8, // order matters as ranges of size are used in selection
@@ -208,7 +208,7 @@ at_to_kat(int array_t) {
 }
 
 
-typedef struct {
+typedef struct FAMObject{
     PyObject_VAR_HEAD
     Py_ssize_t table_size;
     TableElement *table;    // an array of TableElement structs
@@ -219,7 +219,7 @@ typedef struct {
 } FAMObject;
 
 
-typedef enum {
+typedef enum ViewKind{
     ITEMS,
     KEYS,
     VALUES,
@@ -249,7 +249,7 @@ char_get_end_p(char* p, Py_ssize_t dt_size) {
 
 static inline Py_hash_t
 uint_to_hash(npy_uint64 v) {
-    Py_hash_t hash = (Py_hash_t)(v >> 1); // divide by 2 so it always fits in signed space
+    Py_hash_t hash = (Py_hash_t)(v >> 1); // half unsigned fits in signed
     if (hash == -1) {
         return -2;
     }
@@ -264,6 +264,7 @@ int_to_hash(npy_int64 v) {
     }
     return hash;
 }
+
 
 // This is a adapted from https://github.com/python/cpython/blob/ba65a065cf07a7a9f53be61057a090f7311a5ad7/Python/pyhash.c#L92
 #define HASH_MODULUS (((size_t)1 << 61) - 1)
@@ -343,8 +344,10 @@ string_to_hash(char *str, Py_ssize_t len) {
 
 static PyObject *int_cache = NULL;
 
+
 // NOTE: this used to be a Py_ssize_t, which can be 32 bits on some machines and might easily overflow with a few very large indices. Using an explicit 64-bit int seems safer
 static npy_int64 key_count_global = 0;
+
 
 // Fill the int_cache up to size_needed with PyObject ints; `size` is not the key_count_global.
 static int
@@ -371,6 +374,7 @@ int_cache_fill(Py_ssize_t size_needed)
     return 0;
 }
 
+
 // Given the current key_count_global, remove cache elements only if the key_count is less than the the current size of the int_cache.
 void
 int_cache_remove(Py_ssize_t key_count)
@@ -388,12 +392,10 @@ int_cache_remove(Py_ssize_t key_count)
 //------------------------------------------------------------------------------
 // FrozenAutoMapIterator functions
 
-typedef struct {
+typedef struct FAMIObject {
     PyObject_VAR_HEAD
     FAMObject *fam;
-    PyObject **keys_fi; // fast items ptr
     PyArrayObject* keys_array;
-    PyObject **int_cache_fi; // fast items ptr
     ViewKind kind;
     int reversed;
     Py_ssize_t index; // current index state, mutated in-place
@@ -439,14 +441,14 @@ fami_iternext(FAMIObject *self)
                 return PyTuple_Pack(
                     2,
                     PyArray_ToScalar(PyArray_GETPTR1(self->keys_array, index), self->keys_array),
-                    self->int_cache_fi[index]
+                    PyList_GET_ITEM(int_cache, index)
                 );
             }
             else {
                 return PyTuple_Pack(
                     2,
-                    self->keys_fi[index],
-                    self->int_cache_fi[index]
+                    PyList_GET_ITEM(self->fam->keys, index),
+                    PyList_GET_ITEM(int_cache, index)
                 );
             }
         }
@@ -455,13 +457,13 @@ fami_iternext(FAMIObject *self)
                 return PyArray_ToScalar(PyArray_GETPTR1(self->keys_array, index), self->keys_array);
             }
             else {
-                PyObject* yield = self->keys_fi[index];
+                PyObject* yield = PyList_GET_ITEM(self->fam->keys, index);
                 Py_INCREF(yield);
                 return yield;
             }
         }
         case VALUES: {
-            PyObject *yield = self->int_cache_fi[index];
+            PyObject *yield = PyList_GET_ITEM(int_cache, index);
             Py_INCREF(yield);
             return yield;
         }
@@ -515,15 +517,12 @@ fami_new(FAMObject *fam, ViewKind kind, int reversed)
     }
     Py_INCREF(fam);
     fami->fam = fam;
-    if (!fam->keys_array_type) {
-        fami->keys_fi = PySequence_Fast_ITEMS(fam->keys);
-        fami->keys_array = NULL;
-    }
-    else {
-        fami->keys_fi = NULL;
+    if (fam->keys_array_type) {
         fami->keys_array = (PyArrayObject *)fam->keys;
     }
-    fami->int_cache_fi = PySequence_Fast_ITEMS(int_cache);
+    else {
+        fami->keys_array = NULL;
+    }
     fami->kind = kind;
     fami->reversed = reversed;
     fami->index = 0;
@@ -534,7 +533,7 @@ fami_new(FAMObject *fam, ViewKind kind, int reversed)
 // FrozenAutoMapView functions
 
 // A FAMVObject contains a reference to the FAM from which it was derived
-typedef struct {
+typedef struct FAMVObject{
     PyObject_VAR_HEAD
     FAMObject *fam;
     ViewKind kind;
@@ -708,8 +707,8 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
     Py_hash_t mixin = Py_ABS(hash);
     Py_ssize_t table_pos = hash & mask;
 
-    PyObject **keys_fi = PySequence_Fast_ITEMS(self->keys);
     PyObject *guess = NULL;
+    PyObject *keys = self->keys;
     int result = -1;
     Py_hash_t h = 0;
 
@@ -723,7 +722,7 @@ lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
                 table_pos++;
                 continue;
             }
-            guess = keys_fi[table[table_pos].keys_pos];
+            guess = PyList_GET_ITEM(keys, table[table_pos].keys_pos);
             if (guess == key) { // Hit. Object ID comparison
                 return table_pos;
             }
@@ -922,6 +921,7 @@ lookup_hash_unicode(
         table_pos = (5 * (table_pos - SCAN) + (mixin >>= 1) + 1) & mask;
     }
 }
+
 
 // Compare a passed char array to stored keys. This does not use any dynamic memory. Returns -1 on error.
 static Py_ssize_t
@@ -2030,9 +2030,8 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
         }
     }
     else {
-        PyObject **keys_fi = PySequence_Fast_ITEMS(keys);
         for (; i < keys_size; i++) {
-            if (insert(fam, keys_fi[i], i, -1)) {
+            if (insert(fam, PyList_GET_ITEM(keys, i), i, -1)) {
                 goto error;
             }
         }

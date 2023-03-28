@@ -1,36 +1,54 @@
 
-These changes integrate direct support of NumPy arrays given as keys to `AutoMap`s and `FrozenAutoMap`s. Improvements are made in `AutoMap` initialization, whereby an array is converted to a list using specialized array methods (`tolist()`) when necessary. Improvements are made in `FrozenAutoMap` initialization, whereby an immutable array, when given as keys, is held as a reference without copy to a list; further, hashing and lookup make use of C types, avoiding any creation of PyObjects.
+These changes integrate direct support of NumPy arrays given as keys to `AutoMap`s and `FrozenAutoMap`s, optimizing their usage.
 
-Operation with non-array keys, hash table usage and scanning, and usage of the PyObject integer cache, remains unchanged.
+Improvements are made in `AutoMap` initialization, whereby an array is converted to a list using optimal array methods; that list is then held as the keys.
 
-On initialization (`fam_init`), a `KeysArrayType` enum value is assigned to the `keys_array_type` attribute of `FAMObject`. This is used for branching in all places where divergent behavior is required between keys stored as lists (as was done previously) or as keys stored as typed arrays.
+Improvements are made in `FrozenAutoMap` initialization, whereby an immutable array (for integer, floating point, and flexible dtypes), when given as keys, is held as a reference without copy to a list. Further, hashing and lookup make use of C types, avoiding any management of PyObjects.
+
+For array dtypes not explicitly handled, or for non-array keys, `FrozenAutoMap` operation is unchanged. In all cases, hash table layout and scanning, and management of the PyObject integer cache, are the same as before.
+
+A key change is that, on initialization (`fam_init`), a `KeysArrayType` enum value is assigned to the `keys_array_type` attribute of `FAMObject`. This is used for branching in all places where divergent behavior is required between keys stored as lists (as was done previously) or as keys stored as typed arrays.
+
+Performance panels compare FAM(L), FAM(A), AM(A), and Dict (`FrozenAutoMap` created from a list, `FrozenAutoMap` created from an array, `AutoMap` created from an array, and a dictionary implementing an `AutoMap` mapping). Key indicators are the performance of instantiation and lookup.
+
+The relevant comparison for StaticFrame usage is between FAM(A) and AM(A), the latter approximating what StaticFrame does presently when creating `FrozenAutoMap`s. (FAM(L) is not available to StaticFrame as AutoMaps are always created from an array, not a list of Python objects.)
+
+Across all supported types, FAM(A) initialization is more than twice as fast as AM(A). FAM(A) lookup performance varies greatly by type, but always out-performs AM(A), in some cases more than twice as fast as AM(A). In all tests, we see signs that out-performance grows with scale.
+
+Independent of performance time, All `FrozenAutoMap` usage of arrays reduces memory usage: no new `PyObject`s are created and the passed array simply has reference incremented.
 
 
-All `FrozenAutoMap` usage of arrays reduces memory usage: no new `PyObject`s are created.
 
-
-
-General Changes
-
-More usage of `PySequence_Fast_ITEMS` where possible:
-    In `fam_init()` for initialization from lists
-    In `fami` structs for keys and int_cache access during iteration.
+Key Changes
 
 Split the old `fam_new()` into `fam_new()` and `fam_init()`, implemented `__setstate__()`, `__getstate__()`:
     To support pickling a FAM with a NumPy array, `__setstate__()` must re-set the `writeable` flag of an arary to False.
     To integrate `__setstate__()`, the old `fam_new()` had to be divided into a `fam_new()` and a `fam_init()`.
 
+Based on `keys_array_type`, `fam_init` calls type-specific insert routines, which use type-specific hash routines to add entries to the hash table.
+
+On lookup, type-specific lookup routines are called based on `keys_array_type`. These routines identify PyObjects as PyArray scalars or native PyObject types, extract the appropriate C-type, compute a hash, and use type-specific lookup routines to discover the position in the keys array.
+
+
 Split `copy()` into `copy()` and `copy_to_new()`.
-    Due to splitting `fam_new()`, copy allocation and copy setting needed to split into to methods.
+    Due to now having `fam_new()` and `fam_init()`, copy allocation and copy setting needed to split into two methods. Now, in `fam_init`, if a `FAMType` is identified as the keys argument, `copy_to_new()` is used to transfer values from the argument to the new instance. The `copy()` function remains, now using `fam_new()` and `copy_to_new()`.
 
-Additions to the `fam` struct:
-    Added `key_buffer`: For Unicode arrays, this is a dynamically allocated buffer of size equal to one more than the array's max number of characters. This buffer is given to `PyUnicode_AsUCS4`, which will add a NULL and is why the size of the buffer is one more than max characters. This is only used for a FAM with Unicode array keys; all other usage keeps this as NULL.
+Additions to the `FAMObject` struct:
+    `key_array_type`: A `KeysArrayType` enum specifying a list or array dtype. As a list is assigned zero (and all other array dtypes as non-zero), the value can be used to branch on non-array versus array processing.
 
-Extended property tests for FAMs with arrays
-    Tests initialization of both contiguous and non-contiguous arrays
-    Tests all features tested for non-array-based AMs
+    `keys_size`: As determining size must branch on `keys_array_type`, this attribute is used to track size, avoiding having to go the underly keys container.
+
+    `key_buffer`: For Unicode arrays, this is a dynamically allocated buffer of size equal to one more than the array's max number of characters. This buffer is given to `PyUnicode_AsUCS4`, which will add a NULL and is why the size of the buffer is one more than max characters. This is only used for a FAM with Unicode array keys; all other usage keeps this as NULL.
 
 The type of `key_count_global` is now a platform independent 64 bit signed integer. Perviously, it was a `Py_ssize_t`, which is 32 bits on 32 bit systems and could overflow in scenarios when many indicies are created.
+
+Extended property tests for FAMs with arrays
+    A custom Hypothesis strategy has been implemented to deliver both contiguous and non-contiguous arrays.
+
+    New Hypothesis tests for array-initialized `FrozenAutoMap`s now cover all features previously tested by Hypothesis.
+
+
+
 
 
 
@@ -123,50 +141,3 @@ Second Approach
 
     Given PyObjects, can convert to C-types for type-specific loookup.
 
-
-Performance
-
-    NumPy unicode arrays had particularly bad performance
-
-
-Code
-    fam_new() for normal objects
-        insert()
-        lookup_hash()
-
-    fam_new() for int arrays
-        INSERT_SCALARS()
-        insert_int()
-        lookup_hash_int(): use integer as hash!
-
-    fam_new() for unicode arrays
-        insert_unicode()
-        UCS4_to_hash()
-        lookup_hash_unicode()
-
-    fam_new() for AutoMap
-
-
-
-Next Steps
-
-    Can we use datetime46 arrays directly?
-
-
-
-
-
-
-// if (PyArray_IsScalar(key, Byte))
-// npy_byte temp;
-// PyArray_ScalarAsCtype(key, &temp);
-// v = (npy_int64)temp;
-
-
-
-else if (PyArray_IsScalar(key, Half)) {
-    // fprintf(stderr, "got half");
-    // double temp;
-    // PyArray_ScalarAsCtype(key, &temp);
-    // v = (double)temp;
-    v = (double)PyArrayScalar_VAL(key, Half);
