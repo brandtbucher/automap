@@ -1831,12 +1831,12 @@ fam_values(FAMObject *self)
 
 
 // This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`.
-# define INSERT_SCALARS(npy_type, insert_func)          \
+# define INSERT_SCALARS(npy_type, insert_func, pre_insert) \
 if (contiguous) {                                       \
     npy_type* b = (npy_type*)PyArray_DATA(a);           \
     npy_type* b_end = b + keys_size;                    \
     while (b < b_end) {                                 \
-        if (insert_func(fam, *b, i, -1)) {              \
+        if (insert_func(fam, pre_insert(*b), i, -1)) {  \
             goto error;                                 \
         }                                               \
         b++;                                            \
@@ -1846,7 +1846,7 @@ if (contiguous) {                                       \
 else {                                                  \
     for (; i < keys_size; i++) {                        \
         if (insert_func(fam,                            \
-                *(npy_type*)PyArray_GETPTR1(a, i),      \
+                pre_insert(*(npy_type*)PyArray_GETPTR1(a, i)), \
                 i,                                      \
                 -1)) {                                  \
             goto error;                                 \
@@ -1932,7 +1932,6 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
             return -1;
         }
         int array_t = PyArray_TYPE(a);
-
         if (cls != &AMType &&
                 (PyTypeNum_ISSIGNED(array_t)
                 || PyTypeNum_ISUNSIGNED(array_t)
@@ -1986,58 +1985,38 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
         int contiguous = PyArray_IS_C_CONTIGUOUS(a);
         switch (keys_array_type) {
             case KAT_INT64:
-                INSERT_SCALARS(npy_int64, insert_int);
+                INSERT_SCALARS(npy_int64, insert_int,);
                 break;
             case KAT_INT32:
-                INSERT_SCALARS(npy_int32, insert_int);
+                INSERT_SCALARS(npy_int32, insert_int,);
                 break;
             case KAT_INT16:
-                INSERT_SCALARS(npy_int16, insert_int);
+                INSERT_SCALARS(npy_int16, insert_int,);
                 break;
             case KAT_INT8:
-                INSERT_SCALARS(npy_int8, insert_int);
+                INSERT_SCALARS(npy_int8, insert_int,);
                 break;
             case KAT_UINT64:
-                INSERT_SCALARS(npy_uint64, insert_uint);
+                INSERT_SCALARS(npy_uint64, insert_uint,);
                 break;
             case KAT_UINT32:
-                INSERT_SCALARS(npy_uint32, insert_uint);
+                INSERT_SCALARS(npy_uint32, insert_uint,);
                 break;
             case KAT_UINT16:
-                INSERT_SCALARS(npy_uint16, insert_uint);
+                INSERT_SCALARS(npy_uint16, insert_uint,);
                 break;
             case KAT_UINT8:
-                INSERT_SCALARS(npy_uint8, insert_uint);
+                INSERT_SCALARS(npy_uint8, insert_uint,);
                 break;
             case KAT_FLOAT64:
-                INSERT_SCALARS(npy_double, insert_double);
+                INSERT_SCALARS(npy_double, insert_double,);
                 break;
             case KAT_FLOAT32:
-                INSERT_SCALARS(npy_float, insert_double);
+                INSERT_SCALARS(npy_float, insert_double,);
                 break;
             case KAT_FLOAT16:
                 // conversion to double requires special handling
-                if (contiguous) {
-                    npy_half* b = (npy_half*)PyArray_DATA(a);
-                    npy_half* b_end = b + keys_size;
-                    while (b < b_end) {
-                        if (insert_double(fam, npy_half_to_double(*b), i, -1)) {
-                            goto error;
-                        }
-                        b++;
-                        i++;
-                    }
-                }
-                else {
-                    for (; i < keys_size; i++) {
-                        if (insert_double(fam,
-                                npy_half_to_double(*(npy_half*)PyArray_GETPTR1(a, i)),
-                                i,
-                                -1)) {
-                            goto error;
-                        }
-                    }
-                }
+                INSERT_SCALARS(npy_half, insert_double, npy_half_to_double);
                 break;
             case KAT_UNICODE: {
                 // Over allocate buffer by 1 so there is room for null at end. This buffer is only used in lookup();
