@@ -402,7 +402,7 @@ CLS_FF = (
 FF_ORDER = [f.NAME for f in sorted(CLS_FF, key=lambda ff: ff.SORT)]
 
 # -------------------------------------------------------------------------------
-NUMBER = 10
+NUMBER = 50
 
 from itertools import product
 
@@ -559,5 +559,5 @@ if __name__ == "__main__":
         # DictNotIn,
     )
 
-    # run_test(cls_instantiate, "instantiate")
+    run_test(cls_instantiate, "instantiate")
     run_test(cls_lookup, "lookup")
