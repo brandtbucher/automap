@@ -559,5 +559,5 @@ if __name__ == "__main__":
         # DictNotIn,
     )
 
-    run_test(cls_instantiate, "instantiate")
+    # run_test(cls_instantiate, "instantiate")
     run_test(cls_lookup, "lookup")

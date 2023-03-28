@@ -1144,32 +1144,7 @@ lookup_uint(FAMObject *self, PyObject* key) {
 static Py_ssize_t
 lookup_double(FAMObject *self, PyObject* key) {
         double v = 0;
-        // NOTE: we handle PyArray Scalar Byte, Short with PyNumber_Check, below, saving four branches here
-        if (PyArray_IsScalar(key, Int)) {
-            v = (double)PyArrayScalar_VAL(key, Int);
-        }
-        else if (PyArray_IsScalar(key, Long)) {
-            v = (double)PyArrayScalar_VAL(key, Long);
-        }
-        else if (PyArray_IsScalar(key, LongLong)) {
-            v = (double)PyArrayScalar_VAL(key, LongLong);
-        }
-        else if (PyArray_IsScalar(key, UInt)) {
-            v = (double)PyArrayScalar_VAL(key, UInt);
-        }
-        else if (PyArray_IsScalar(key, ULong)) {
-            v = (double)PyArrayScalar_VAL(key, ULong);
-        }
-        else if (PyArray_IsScalar(key, ULongLong)) {
-            v = (double)PyArrayScalar_VAL(key, ULongLong);
-        }
-        else if (PyArray_IsScalar(key, Half)) {
-            v = npy_half_to_double(PyArrayScalar_VAL(key, Half));
-        }
-        else if (PyArray_IsScalar(key, Float)) {
-            v = (double)PyArrayScalar_VAL(key, Float);
-        }
-        else if (PyArray_IsScalar(key, Double)) {
+        if (PyArray_IsScalar(key, Double)) {
             v = PyArrayScalar_VAL(key, Double);
         }
         else if (PyFloat_Check(key)) {
@@ -1185,6 +1160,31 @@ lookup_double(FAMObject *self, PyObject* key) {
                 PyErr_Clear();
                 return -1;
             }
+        }
+        // NOTE: we handle PyArray Scalar Byte, Short with PyNumber_Check, below, saving four branches here
+        else if (PyArray_IsScalar(key, LongLong)) {
+            v = (double)PyArrayScalar_VAL(key, LongLong);
+        }
+        else if (PyArray_IsScalar(key, Long)) {
+            v = (double)PyArrayScalar_VAL(key, Long);
+        }
+        else if (PyArray_IsScalar(key, Int)) {
+            v = (double)PyArrayScalar_VAL(key, Int);
+        }
+        else if (PyArray_IsScalar(key, ULongLong)) {
+            v = (double)PyArrayScalar_VAL(key, ULongLong);
+        }
+        else if (PyArray_IsScalar(key, ULong)) {
+            v = (double)PyArrayScalar_VAL(key, ULong);
+        }
+        else if (PyArray_IsScalar(key, UInt)) {
+            v = (double)PyArrayScalar_VAL(key, UInt);
+        }
+        else if (PyArray_IsScalar(key, Float)) {
+            v = (double)PyArrayScalar_VAL(key, Float);
+        }
+        else if (PyArray_IsScalar(key, Half)) {
+            v = npy_half_to_double(PyArrayScalar_VAL(key, Half));
         }
         else if (PyBool_Check(key)) {
             v = PyObject_IsTrue(key);
