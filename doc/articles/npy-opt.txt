@@ -3,7 +3,7 @@ These changes integrate direct support of NumPy arrays given as keys to `AutoMap
 
 Improvements are made in `AutoMap` initialization, whereby an array is converted to a list using optimal array methods; that list is then held as the keys.
 
-Improvements are made in `FrozenAutoMap` initialization, whereby an immutable array (for integer, floating point, and flexible dtypes), when given as keys, is held as a reference without copy to a list. Further, hashing and lookup make use of C types, avoiding any management of PyObjects.
+Improvements are made in `FrozenAutoMap` initialization, whereby an immutable array (for integer, floating point, and flexible dtypes), when given as keys, is held as a reference without copying to a list. Further, hashing and lookup make use of C types, avoiding any management of PyObjects.
 
 For array dtypes not explicitly handled, or for non-array keys, `FrozenAutoMap` operation is unchanged. In all cases, hash table layout and scanning, and management of the PyObject integer cache, are the same as before.
 
