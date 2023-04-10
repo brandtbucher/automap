@@ -913,7 +913,7 @@ lookup_hash_unicode(
             }
             p_start = (Py_UCS4*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
             // memcmp returns 0 on match
-            if (!memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size))) {
+            if (!memcmp(p_start, key, Py_MIN(key_size, dt_size))) {
                 return table_pos;
             }
             table_pos++;
@@ -954,7 +954,7 @@ lookup_hash_string(
             }
             p_start = (char*)PyArray_GETPTR1(a, table[table_pos].keys_pos);
             // memcmp returns 0 on match
-            if (!memcmp(p_start, key, (key_size < dt_size ? key_size : dt_size))) {
+            if (!memcmp(p_start, key, Py_MIN(key_size, dt_size))) {
                 return table_pos;
             }
             table_pos++;
