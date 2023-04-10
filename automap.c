@@ -700,7 +700,7 @@ famv_new(FAMObject *fam, int kind)
 
 // Given a key and a computed hash, return the table_pos if that hash and key are found, or if not, the first table position that has not been assigned. Return -1 on error.
 static Py_ssize_t
-lookup_hash(FAMObject *self, PyObject *key, Py_hash_t hash)
+lookup_hash_obj(FAMObject *self, PyObject *key, Py_hash_t hash)
 {
     TableElement *table = self->table;
     Py_ssize_t mask = self->table_size - 1;
@@ -1281,7 +1281,7 @@ lookup(FAMObject *self, PyObject *key) {
             if (hash == -1) {
                 return -1;
             }
-            table_pos = lookup_hash(self, key, hash);
+            table_pos = lookup_hash_obj(self, key, hash);
             break;
         }
     }
@@ -1294,7 +1294,7 @@ lookup(FAMObject *self, PyObject *key) {
 
 // Insert a key_pos, hash pair into the table. Assumes table already has appropriate size. When inserting a new itme, `hash` is -1, forcing a fresh hash to be computed here. Return 0 on success, -1 on error.
 static int
-insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
+insert_obj(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
 {
     if (hash == -1) {
         hash = PyObject_Hash(key);
@@ -1303,7 +1303,7 @@ insert(FAMObject *self, PyObject *key, Py_ssize_t keys_pos, Py_hash_t hash)
         }
     }
     // table position is not dependent on keys_pos
-    Py_ssize_t table_pos = lookup_hash(self, key, hash);
+    Py_ssize_t table_pos = lookup_hash_obj(self, key, hash);
 
     if (table_pos < 0) {
         return -1;
@@ -1497,7 +1497,7 @@ grow_table(FAMObject *self, Py_ssize_t keys_size)
         for (table_pos = 0; table_pos < size_old + SCAN - 1; table_pos++) {
             i = table_old[table_pos].keys_pos;
             h = table_old[table_pos].hash;
-            if ((h != -1) && insert(self, PyList_GET_ITEM(self->keys, i), i, h))
+            if ((h != -1) && insert_obj(self, PyList_GET_ITEM(self->keys, i), i, h))
             {
                 goto restore;
             }
@@ -1602,7 +1602,7 @@ extend(FAMObject *self, PyObject *keys)
 
     for (Py_ssize_t index = 0; index < size_extend; index++) {
         // get the new keys_size after each append
-        if (insert(self, keys_fi[index], PyList_GET_SIZE(self->keys), -1) ||
+        if (insert_obj(self, keys_fi[index], PyList_GET_SIZE(self->keys), -1) ||
             PyList_Append(self->keys, keys_fi[index]))
         {
             Py_DECREF(keys);
@@ -1629,7 +1629,7 @@ append(FAMObject *self, PyObject *key)
         return -1;
     }
     // keys_size is already incremented; provide last index
-    if (insert(self, key, self->keys_size - 1, -1) ||
+    if (insert_obj(self, key, self->keys_size - 1, -1) ||
         PyList_Append(self->keys, key))
     {
         return -1;
@@ -1849,7 +1849,7 @@ fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 }
 
 
-// This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`. An optional `pre_insert` function can be supplied to transform extracted values before calling the insert function.
+// This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`. An optional `pre_insert` function can be supplied to transform extracted values before calling the appropriate insert function.
 # define INSERT_SCALARS(npy_type, insert_func, pre_insert)    \
 if (contiguous) {                                             \
     npy_type* b = (npy_type*)PyArray_DATA(a);                 \
@@ -2032,7 +2032,7 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
     }
     else {
         for (; i < keys_size; i++) {
-            if (insert(fam, PyList_GET_ITEM(keys, i), i, -1)) {
+            if (insert_obj(fam, PyList_GET_ITEM(keys, i), i, -1)) {
                 goto error;
             }
         }
