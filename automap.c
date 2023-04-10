@@ -1832,6 +1832,23 @@ fam_values(FAMObject *self)
 }
 
 
+static PyObject *
+fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
+{
+    // NOTE: The original fam_new used to be able to provide a same reference back if a fam was in the args; this is tricky now that we have fam_init
+    FAMObject *self = (FAMObject *)cls->tp_alloc(cls, 0);
+    if (!self) {
+        return NULL;
+    }
+    self->table = NULL;
+    self->keys = NULL;
+    self->key_buffer = NULL;
+    self->keys_size = 0;
+
+    return (PyObject*)self;
+}
+
+
 // This macro can be used with integer and floating point NumPy types, given an `npy_type` and a specialized `insert_func`. Uses context of `fam_init` to get `fam`, `contiguous`, `a`, `keys_size`, and `i`. An optional `pre_insert` function can be supplied to transform extracted values before calling the insert function.
 # define INSERT_SCALARS(npy_type, insert_func, pre_insert)    \
 if (contiguous) {                                             \
@@ -1881,22 +1898,6 @@ else {                                                         \
         }                                                      \
     }                                                          \
 }                                                              \
-
-static PyObject *
-fam_new(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
-{
-    // NOTE: The original fam_new used to be able to provide a same reference back if a fam was in the args; this is tricky now that we have fam_init
-    FAMObject *self = (FAMObject *)cls->tp_alloc(cls, 0);
-    if (!self) {
-        return NULL;
-    }
-    self->table = NULL;
-    self->keys = NULL;
-    self->key_buffer = NULL;
-    self->keys_size = 0;
-
-    return (PyObject*)self;
-}
 
 
 // Initialize an allocated FAMObject. Returns 0 on success, -1 on error.
@@ -2040,6 +2041,10 @@ fam_init(PyObject *self, PyObject *args, PyObject *kwargs)
 error:
     return -1;
 }
+
+
+# undef INSERT_SCALARS
+# undef INSERT_FLEXIBLE
 
 
 static PyObject *
