@@ -2226,3 +2226,4 @@ PyInit_automap(void)
     }
     return automap;
 }
+
