@@ -334,7 +334,7 @@ famv_contains(FAMVObject *self, PyObject *other)
         return -1;
     }
     int result = PySequence_Contains(iterator, other);
-    Py_DECREF(other);
+    Py_DECREF(iterator);
     return result;
 }
 
